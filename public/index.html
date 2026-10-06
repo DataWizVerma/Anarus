@@ -2209,14 +2209,31 @@ dlBtn.addEventListener('click',async function(){
   if(!pairs.length){showToast('Please paste at least one valid URL','error');return;}
   var sfx=dlSfx.value.trim(),bg=dlBg,fmt=dlFmt.value;
 
-  // Notify user about selected mode
+  // Check model status before starting
   if(bg==='white'){
-    showToast('🤖 AI Background Removal active — processing on server','info',5000);
+    updP(0,0,pairs.length,'Checking AI model status...');
+    dlPSec.style.display='block';
+    try{
+      var statusResp = await fetch('/api/bg-status');
+      var statusData = await statusResp.json();
+      if(statusData.error){
+        showToast('❌ AI model failed to load: '+statusData.error,'error',8000);
+        return;
+      }
+      if(statusData.loading){
+        showToast('⏳ AI model is loading (first time ~30s)... Starting download when ready.','warn',8000);
+        updP(0,0,pairs.length,'⏳ Waiting for AI model to load...');
+      } else if(statusData.ready){
+        showToast('🤖 AI Background Removal ready — processing on server','info',4000);
+      }
+    }catch(se){
+      showToast('⚠ Could not check model status, proceeding anyway...','warn',3000);
+    }
   } else if(bg==='enhance'){
     showToast('✨ Enhanced Quality active — 2x upscale + sharpening on server. Image content will NOT change.','info',6000);
   }
 
-  var btnLabel = bg==='white'?'AI Processing...' : bg==='enhance'?'✨ Enhancing...' : 'Downloading...';
+  var btnLabel = bg==='white'?'🤖 AI Processing...' : bg==='enhance'?'✨ Enhancing...' : 'Downloading...';
   dlRun=true;dlBtn.disabled=true;dlBtn.innerHTML='<span class="spinner"></span> '+btnLabel;
   dlPSec.style.display='block';dlStat.textContent='';updP(0,0,pairs.length,'Starting...');
 
