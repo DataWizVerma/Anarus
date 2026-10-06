@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blank Column Finder | BlazeTools</title>
+  <meta name="description" content="BlazeTools Excel Blank Column Finder — visualize and download highlighted blank columns from any Excel file.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222;
+    --border: #2e2e2e;
+    --accent: #ff4444;
+    --accent2: #ff7a00;
+    --text: #f0f0f0;
+    --muted: #888;
+    --green: #22c55e;
+    --yellow: #fbbf24;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1.25rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .logo {
+    width: 36px;
+    height: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.02em; }
+  header span { font-size: 0.8rem; color: var(--muted); font-weight: 400; margin-left: 0.5rem; }
+
+  .main { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface);
+    position: relative;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: #1e1414;
+  }
+
+  .upload-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon { font-size: 3rem; margin-bottom: 1rem; display: block; }
+  .upload-zone h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .upload-zone p { color: var(--muted); font-size: 0.9rem; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1.4rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    font-family: 'Syne', sans-serif;
+    margin-top: 1rem;
+  }
+  .btn:hover { opacity: 0.88; }
+  .btn:active { transform: scale(0.97); }
+  .btn-secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+  .btn-green { background: var(--green); }
+
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+  }
+  .stat-card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.4rem; }
+  .stat-card .value { font-size: 1.8rem; font-weight: 800; font-family: 'DM Mono', monospace; }
+  .stat-card.red .value { color: var(--accent); }
+  .stat-card.green .value { color: var(--green); }
+  .stat-card.yellow .value { color: var(--yellow); }
+
+  .section-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin: 1.5rem 0 0.75rem;
+  }
+
+  .columns-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.6rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .col-badge {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    border: 1px solid transparent;
+  }
+
+  .col-badge.blank {
+    background: #2a1010;
+    border-color: #5a1a1a;
+    color: #ff8080;
+  }
+  .col-badge.partial {
+    background: #2a1f08;
+    border-color: #5a3d00;
+    color: #fbbf24;
+  }
+  .col-badge.full {
+    background: #0d1f14;
+    border-color: #1a4a26;
+    color: #6ee7a4;
+  }
+
+  .col-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .col-pct { font-family: 'DM Mono', monospace; font-size: 0.78rem; white-space: nowrap; }
+  .col-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .col-badge.blank .col-dot { background: var(--accent); }
+  .col-badge.partial .col-dot { background: var(--yellow); }
+  .col-badge.full .col-dot { background: var(--green); }
+
+  .table-wrapper {
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    max-height: 500px;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.82rem;
+  }
+
+  thead th {
+    background: var(--surface);
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  thead th.col-blank-header {
+    background: #2a1010 !important;
+    color: #ff8080;
+  }
+
+  thead th.col-partial-header {
+    background: #2a1f08 !important;
+    color: #fbbf24;
+  }
+
+  tbody tr:nth-child(even) td { background: #161616; }
+  tbody td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #1e1e1e;
+    white-space: nowrap;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text);
+  }
+
+  td.cell-empty {
+    background: #2a1010 !important;
+    color: #ff4444 !important;
+    font-style: italic;
+  }
+
+  td.cell-empty::after {
+    content: '∅ blank';
+    font-size: 0.72rem;
+    opacity: 0.8;
+  }
+
+  .legend {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+
+  .filter-btn {
+    padding: 0.35rem 0.9rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+    font-family: 'Syne', sans-serif;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover, .filter-btn.active { background: var(--surface2); color: var(--text); border-color: #555; }
+  .filter-btn.active-red { background: #2a1010; color: #ff8080; border-color: #5a1a1a; }
+
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--muted);
+  }
+  .empty-state .big { font-size: 4rem; display: block; margin-bottom: 1rem; opacity: 0.3; }
+
+  #loading {
+    display: none;
+    text-align: center;
+    padding: 2rem;
+    color: var(--muted);
+  }
+  .spinner {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin-bottom: 0.75rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .sheet-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .sheet-tab {
+    padding: 0.4rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-family: 'Syne', sans-serif;
+    transition: all 0.15s;
+  }
+  .sheet-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .download-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .download-bar p { font-size: 0.85rem; color: var(--muted); }
+  .download-bar strong { color: var(--text); display: block; font-size: 0.95rem; }
+
+  #results { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" style="display:flex;align-items:center;gap:0.5rem;text-decoration:none;color:var(--muted);font-size:0.82rem;transition:color 0.2s;padding:0.25rem 0.5rem;border-radius:6px;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+    BlazeTools
+  </a>
+  <div class="logo" style="margin-left:0.75rem;">📊</div>
+  <div>
+    <h1>Blank Column Finder <span>— Visualize blank cells across all columns</span></h1>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- Upload Section -->
+  <div id="uploadSection">
+    <div class="upload-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+      <span class="upload-icon">📊</span>
+      <h2>Drop your Excel file here</h2>
+      <p>or click to select a file</p>
+      <p style="margin-top:0.5rem;font-size:0.8rem;color:#555;">.xlsx, .xls, .csv supported</p>
+      <button class="btn" onclick="event.stopPropagation(); document.getElementById('fileInput').click()">
+        📂 Choose File
+      </button>
+    </div>
+  </div>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <p>Processing file...</p>
+  </div>
+
+  <!-- Results Section -->
+  <div id="results">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
+      <div>
+        <div style="font-size:1.2rem; font-weight:700;" id="fileName"></div>
+        <div style="font-size:0.8rem; color:var(--muted);" id="fileInfo"></div>
+      </div>
+      <button class="btn btn-secondary" onclick="resetApp()">🔄 Load New File</button>
+    </div>
+
+    <!-- Sheet Tabs -->
+    <div class="sheet-tabs" id="sheetTabs"></div>
+
+    <!-- Stats -->
+    <div class="stats-bar">
+      <div class="stat-card red">
+        <div class="label">Fully Blank Columns</div>
+        <div class="value" id="statBlank">0</div>
+      </div>
+      <div class="stat-card yellow">
+        <div class="label">Partially Blank</div>
+        <div class="value" id="statPartial">0</div>
+      </div>
+      <div class="stat-card green">
+        <div class="label">Complete Columns</div>
+        <div class="value" id="statFull">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Total Rows</div>
+        <div class="value" id="statRows">0</div>
+      </div>
+    </div>
+
+    <!-- Download -->
+    <div class="download-bar">
+      <div>
+        <strong>Download Highlighted Excel</strong>
+        <p>Blank cells highlighted with red — ready to download</p>
+      </div>
+      <button class="btn btn-green" id="downloadBtn">⬇️ Download Highlighted Excel</button>
+    </div>
+
+    <!-- Column Overview -->
+    <div class="section-title">📋 Column-wise Analysis</div>
+    <div class="toolbar">
+      <button class="filter-btn active" id="filterAll" onclick="filterCols('all')">Show All</button>
+      <button class="filter-btn" id="filterBlank" onclick="filterCols('blank')">🔴 Blank Only</button>
+      <button class="filter-btn" id="filterPartial" onclick="filterCols('partial')">🟡 Partial</button>
+      <button class="filter-btn" id="filterFull" onclick="filterCols('full')">🟢 Complete</button>
+    </div>
+    <div class="columns-grid" id="columnsGrid"></div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#ff4444"></div> 100% Blank</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div> Partially Blank (1–99%)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div> All Filled</div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="section-title">📊 Data Preview (blank cells highlighted)</div>
+    <div class="table-wrapper" id="tableWrapper">
+      <table id="dataTable"></table>
+    </div>
+    <p style="font-size:0.75rem; color:var(--muted); margin-top:0.5rem;">* Showing first 200 rows in preview</p>
+  </div>
+
+</div>
+
+<script>
+let workbook = null;
+let currentSheet = null;
+let allSheetData = {};
+let colFilter = 'all';
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) processFile(e.target.files[0]);
+});
+
+function processFile(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['xlsx','xls','csv'].includes(ext)) {
+    alert('Sirf .xlsx, .xls ya .csv file upload karo!');
+    return;
+  }
+
+  document.getElementById('uploadSection').style.display = 'none';
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('results').style.display = 'none';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      workbook = XLSX.read(data, { type: 'array', cellDates: true });
+
+      document.getElementById('fileName').textContent = file.name;
+      document.getElementById('fileInfo').textContent =
+        `${workbook.SheetNames.length} sheet(s) • ${(file.size/1024).toFixed(1)} KB`;
+
+      allSheetData = {};
+      workbook.SheetNames.forEach(name => {
+        allSheetData[name] = analyzeSheet(name);
+      });
+
+      buildSheetTabs();
+      loadSheet(workbook.SheetNames[0]);
+
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('results').style.display = 'block';
+    } catch(err) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('uploadSection').style.display = 'block';
+      alert('Error reading file: ' + err.message);
+    }
+  };
+  reader.onerror = () => {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('uploadSection').style.display = 'block';
+    alert('Could not read the file. Please try again.');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function analyzeSheet(sheetName) {
+  const ws = workbook.Sheets[sheetName];
+  const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, blankrows: false });
+  if (!json || json.length < 2) return { headers: [], rows: [], colStats: [] };
+
+  const headers = (json[0] || []).map((h, i) => h !== null && h !== undefined && String(h).trim() !== '' ? String(h).trim() : `Column_${i+1}`);
+  const dataRows = json.slice(1);
+  const totalRows = dataRows.length;
+
+  const colStats = headers.map((header, colIdx) => {
+    let emptyCount = 0;
+    dataRows.forEach(row => {
+      const val = row[colIdx];
+      if (val === null || val === undefined || String(val).trim() === '') emptyCount++;
+    });
+    const blankPct = totalRows > 0 ? (emptyCount / totalRows * 100) : 0;
+    let status = 'full';
+    if (blankPct === 100) status = 'blank';
+    else if (blankPct > 0) status = 'partial';
+    return { header, colIdx, emptyCount, totalRows, blankPct: Math.round(blankPct), status };
+  });
+
+  return { headers, rows: dataRows, colStats };
+}
+
+function buildSheetTabs() {
+  const tabs = document.getElementById('sheetTabs');
+  tabs.innerHTML = '';
+  workbook.SheetNames.forEach(name => {
+    const btn = document.createElement('button');
+    btn.className = 'sheet-tab';
+    btn.textContent = name;
+    btn.onclick = () => loadSheet(name);
+    tabs.appendChild(btn);
+  });
+}
+
+function loadSheet(name) {
+  currentSheet = name;
+  document.querySelectorAll('.sheet-tab').forEach(t => {
+    t.classList.toggle('active', t.textContent === name);
+  });
+  const data = allSheetData[name];
+  updateStats(data);
+  renderColumns(data);
+  renderTable(data);
+  setupDownload(name);
+}
+
+function updateStats(data) {
+  const blank = data.colStats.filter(c => c.status === 'blank').length;
+  const partial = data.colStats.filter(c => c.status === 'partial').length;
+  const full = data.colStats.filter(c => c.status === 'full').length;
+  document.getElementById('statBlank').textContent = blank;
+  document.getElementById('statPartial').textContent = partial;
+  document.getElementById('statFull').textContent = full;
+  document.getElementById('statRows').textContent = data.rows.length;
+}
+
+function filterCols(f) {
+  colFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active','active-red'));
+  const btn = document.getElementById('filter' + f.charAt(0).toUpperCase() + f.slice(1));
+  if (btn) { btn.classList.add('active'); if(f==='blank') btn.classList.add('active-red'); }
+  renderColumns(allSheetData[currentSheet]);
+}
+
+function renderColumns(data) {
+  const grid = document.getElementById('columnsGrid');
+  grid.innerHTML = '';
+  const filtered = data.colStats.filter(c => colFilter === 'all' || c.status === colFilter);
+
+  if (filtered.length === 0) {
+    grid.innerHTML = '<p style="color:var(--muted);font-size:0.85rem;grid-column:1/-1">No columns found for this filter.</p>';
+    return;
+  }
+
+  filtered.forEach(c => {
+    const badge = document.createElement('div');
+    badge.className = `col-badge ${c.status}`;
+    badge.title = `${c.emptyCount} blank / ${c.totalRows} total rows`;
+    badge.innerHTML = `
+      <div class="col-dot"></div>
+      <div class="col-name">${escHtml(c.header)}</div>
+      <div class="col-pct">${c.blankPct}% blank</div>
+    `;
+    grid.appendChild(badge);
+  });
+}
+
+function renderTable(data) {
+  const table = document.getElementById('dataTable');
+  table.innerHTML = '';
+
+  if (!data.headers.length) {
+    table.innerHTML = '<tr><td style="padding:2rem;color:var(--muted)">No data found in this sheet.</td></tr>';
+    return;
+  }
+
+  const thead = document.createElement('thead');
+  const trh = document.createElement('tr');
+  data.colStats.forEach(c => {
+    const th = document.createElement('th');
+    th.textContent = c.header;
+    if (c.status === 'blank') th.className = 'col-blank-header';
+    else if (c.status === 'partial') th.className = 'col-partial-header';
+    trh.appendChild(th);
+  });
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  const previewRows = data.rows.slice(0, 200);
+  previewRows.forEach(row => {
+    const tr = document.createElement('tr');
+    data.colStats.forEach(c => {
+      const td = document.createElement('td');
+      const val = row[c.colIdx];
+      const isEmpty = val === null || val === undefined || String(val).trim() === '';
+      if (isEmpty) {
+        td.className = 'cell-empty';
+      } else {
+        td.textContent = formatCell(val);
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+}
+
+function formatCell(val) {
+  if (val instanceof Date) return val.toLocaleDateString('en-IN');
+  return String(val);
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function setupDownload(sheetName) {
+  document.getElementById('downloadBtn').onclick = () => downloadHighlighted(sheetName);
+}
+
+function downloadHighlighted(sheetName) {
+  try {
+    const data = allSheetData[sheetName];
+    const ws = workbook.Sheets[sheetName];
+    const newWb = XLSX.utils.book_new();
+
+    // Clone all sheets
+    workbook.SheetNames.forEach(name => {
+      const clonedWs = Object.assign({}, workbook.Sheets[name]);
+      XLSX.utils.book_append_sheet(newWb, clonedWs, name);
+    });
+
+    // Apply highlights on the selected sheet
+    const targetWs = newWb.Sheets[sheetName];
+    const json = XLSX.utils.sheet_to_json(targetWs, { header: 1, defval: null });
+
+    if (json.length > 1) {
+      const totalRows = json.length - 1;
+      data.colStats.forEach(c => {
+        const colLetter = XLSX.utils.encode_col(c.colIdx);
+
+        // Header highlight if 100% blank
+        if (c.status === 'blank') {
+          const headerCell = colLetter + '1';
+          if (!targetWs[headerCell]) targetWs[headerCell] = { v: c.header, t: 's' };
+          targetWs[headerCell].s = {
+            fill: { fgColor: { rgb: 'FF4444' } },
+            font: { bold: true, color: { rgb: 'FFFFFF' } }
+          };
+        } else if (c.status === 'partial') {
+          const headerCell = colLetter + '1';
+          if (!targetWs[headerCell]) targetWs[headerCell] = { v: c.header, t: 's' };
+          targetWs[headerCell].s = {
+            fill: { fgColor: { rgb: 'FBBF24' } },
+            font: { bold: true, color: { rgb: '1a1a1a' } }
+          };
+        }
+
+        // Cell-level highlights
+        for (let r = 1; r <= totalRows; r++) {
+          const cellAddr = colLetter + (r + 1);
+          const val = json[r][c.colIdx];
+          const isEmpty = val === null || val === undefined || String(val).trim() === '';
+          if (isEmpty) {
+            if (!targetWs[cellAddr]) targetWs[cellAddr] = { v: '', t: 's' };
+            targetWs[cellAddr].s = {
+              fill: { fgColor: { rgb: 'FFCCCC' } },
+              font: { color: { rgb: 'CC0000' }, italic: true }
+            };
+          }
+        }
+      });
+    }
+
+    const fileName = (document.getElementById('fileName').textContent || 'file').replace(/\.[^.]+$/, '');
+    XLSX.writeFile(newWb, `${fileName}_highlighted.xlsx`, { cellStyles: true });
+
+  } catch(err) {
+    alert('Download error: ' + err.message);
+  }
+}
+
+function resetApp() {
+  workbook = null;
+  currentSheet = null;
+  allSheetData = {};
+  document.getElementById('fileInput').value = '';
+  document.getElementById('uploadSection').style.display = 'block';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('loading').style.display = 'none';
+}
+</script>
+
+</body>
+</html>
