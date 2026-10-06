@@ -406,7 +406,15 @@ io.on('connection', (socket) => {
 });
 
 // ─── Start server ────────────────────────────────────────────────────────────
+// On Vercel: export app (serverless), don't call listen
+// On Render / local: call listen normally
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`\n  🚀 BlazeTools running at http://localhost:${PORT}\n`);
-});
+
+if (!process.env.VERCEL) {
+  server.listen(PORT, () => {
+    console.log(`\n  🚀 BlazeTools running at http://localhost:${PORT}\n`);
+  });
+}
+
+// Required for Vercel serverless
+module.exports = app;
