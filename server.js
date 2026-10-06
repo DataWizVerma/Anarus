@@ -20,7 +20,7 @@ let bgModelError    = null;
 let bgModelLoading  = false;
 
 const BG_CONFIG = {
-  model: 'isnet_quint8',          // Smallest + fastest model
+  model: 'small',                 // Smallest + fastest model (low memory, Render-compatible)
   output: { format: 'image/png', quality: 1.0 }
 };
 
@@ -406,15 +406,7 @@ io.on('connection', (socket) => {
 });
 
 // ─── Start server ────────────────────────────────────────────────────────────
-// On Vercel: export app (serverless), don't call listen
-// On Render / local: call listen normally
 const PORT = process.env.PORT || 3000;
-
-if (!process.env.VERCEL) {
-  server.listen(PORT, () => {
-    console.log(`\n  🚀 BlazeTools running at http://localhost:${PORT}\n`);
-  });
-}
-
-// Required for Vercel serverless
-module.exports = app;
+server.listen(PORT, () => {
+  console.log(`\n  🚀 BlazeTools running at http://localhost:${PORT}\n`);
+});
