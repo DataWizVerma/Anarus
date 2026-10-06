@@ -2009,8 +2009,8 @@ var dlBg='original',dlRun=false;
 // ── Background / Quality toggle ───────────────────────────────────────────────
 var bgHints = {
   'original': 'Download the image as-is in original quality',
-  'white':    '🤖 AI removes background on server → places on white canvas. Works on all image types (JPG, PNG, etc.)',
-  'enhance':  '✨ Image content stays the same — only sharpness & resolution improves (2x upscale + unsharp mask). No AI generation.'
+  'white':    'White Background fills white behind transparent areas (PNG). Instant & fast processing.',
+  'enhance':  '✨ Subtle contrast and saturation boost via canvas. Image content unchanged.'
 };
 function hilite(btn){
   [dlBgOBtn,dlBgWBtn,dlBgEBtn].forEach(function(b){
@@ -2073,55 +2073,39 @@ function fetchViaProxy(url){
   });
 }
 
-// ── Canvas convert: server-side AI bg removal + white bg + format ────────────
-// Calls /api/remove-bg on the server for proper AI-based background removal
+// ── Canvas convert: proxy fetch + white bg fill + format convert ──────────────
+// 100% client-side — works on Render, Vercel, anywhere, no server deps needed
+// Note: White bg fills white behind transparent pixels (PNG alpha).
+// For fully opaque images (JPG) it converts format and adds white base layer.
 function canvasBg(url,bg,fmt){
   return new Promise(async function(res,rej){
     try{
-      var processedBlob;
+      // Fetch image via server proxy (avoids CORS)
+      var proxyResp = await fetch(proxyUrl(url));
+      if(!proxyResp.ok) throw new Error('Proxy fetch failed: HTTP '+proxyResp.status);
+      var imgBlob = await proxyResp.blob();
 
-      if(bg==='white'){
-        // Call server-side AI background removal
-        var response = await fetch('/api/remove-bg', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: url })
-        });
-        if(!response.ok){
-          var errData = await response.json().catch(function(){return {};});
-          throw new Error(errData.error || 'Server bg removal failed (HTTP '+response.status+')');
-        }
-        processedBlob = await response.blob();
-      } else {
-        // No bg removal, just fetch via proxy
-        var proxyResp = await fetch(proxyUrl(url));
-        if(!proxyResp.ok) throw new Error('HTTP '+proxyResp.status);
-        processedBlob = await proxyResp.blob();
-      }
-
-      // Draw on canvas with white background + convert to desired format
       var imgEl = new Image();
-      var blobUrl = URL.createObjectURL(processedBlob);
+      var blobUrl = URL.createObjectURL(imgBlob);
       imgEl.onload = function(){
         URL.revokeObjectURL(blobUrl);
         var c = document.createElement('canvas');
-        c.width = imgEl.naturalWidth || imgEl.width;
+        c.width  = imgEl.naturalWidth  || imgEl.width;
         c.height = imgEl.naturalHeight || imgEl.height;
         var ctx = c.getContext('2d');
-        // Fill white background
+        // Always fill white first so transparent pixels become white
         if(bg==='white'){
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, c.width, c.height);
         }
         ctx.drawImage(imgEl, 0, 0);
-        // PNG = lossless, JPG/WebP = quality 1.0 = max
         var mime = fmt==='png'?'image/png':(fmt==='webp'?'image/webp':'image/jpeg');
         var q = mime==='image/png'?undefined:1.0;
-        c.toBlob(function(b){ b ? res(b) : rej(new Error('Canvas toBlob returned null')); }, mime, q);
+        c.toBlob(function(b){ b ? res(b) : rej(new Error('Canvas toBlob failed')); }, mime, q);
       };
       imgEl.onerror = function(){
         URL.revokeObjectURL(blobUrl);
-        rej(new Error('Image load failed after processing'));
+        rej(new Error('Image failed to load from proxy'));
       };
       imgEl.src = blobUrl;
     }catch(e){
@@ -2209,40 +2193,21 @@ dlBtn.addEventListener('click',async function(){
   if(!pairs.length){showToast('Please paste at least one valid URL','error');return;}
   var sfx=dlSfx.value.trim(),bg=dlBg,fmt=dlFmt.value;
 
-  // Check model status before starting
+  // Notify user
   if(bg==='white'){
-    updP(0,0,pairs.length,'Checking AI model status...');
-    dlPSec.style.display='block';
-    try{
-      var statusResp = await fetch('/api/bg-status');
-      var statusData = await statusResp.json();
-      if(statusData.error){
-        showToast('❌ AI model failed to load: '+statusData.error,'error',8000);
-        return;
-      }
-      if(statusData.loading){
-        showToast('⏳ AI model is loading (first time ~30s)... Starting download when ready.','warn',8000);
-        updP(0,0,pairs.length,'⏳ Waiting for AI model to load...');
-      } else if(statusData.ready){
-        showToast('🤖 AI Background Removal ready — processing on server','info',4000);
-      }
-    }catch(se){
-      showToast('⚠ Could not check model status, proceeding anyway...','warn',3000);
-    }
+    showToast('⬜ White Background active — adding white fill behind transparent areas','info',4000);
   } else if(bg==='enhance'){
-    showToast('✨ Enhanced Quality active — 2x upscale + sharpening on server. Image content will NOT change.','info',6000);
+    showToast('✨ Enhanced Quality active — client-side contrast & colour boost','info',4000);
   }
 
-  var btnLabel = bg==='white'?'🤖 AI Processing...' : bg==='enhance'?'✨ Enhancing...' : 'Downloading...';
+  var btnLabel = bg==='white'?'⬜ Processing...' : bg==='enhance'?'✨ Enhancing...' : 'Downloading...';
   dlRun=true;dlBtn.disabled=true;dlBtn.innerHTML='<span class="spinner"></span> '+btnLabel;
   dlPSec.style.display='block';dlStat.textContent='';updP(0,0,pairs.length,'Starting...');
 
   var zip=new JSZip();
-  var results=[];     // for Excel report
+  var results=[];
   var done=0,errs=0;
-
-  // Lower concurrency for heavy server-side processing
-  var concurrency = (bg==='white' || bg==='enhance') ? 1 : 4;
+  var concurrency = 4;
 
   for(var i=0;i<pairs.length;i+=concurrency){
     await Promise.all(pairs.slice(i,i+concurrency).map(async function(item){
@@ -2251,78 +2216,47 @@ dlBtn.addEventListener('click',async function(){
       var fname=bFname(iNo,url,sfx,fmt);
       var type=isPdf?'PDF':'Image';
       var statusMsg='',remarks='',okFlag='ok';
-      var progressLabel = bg==='white'?'🤖 Removing bg: '+fname : bg==='enhance'?'✨ Enhancing: '+fname : fname;
-      updP(done,errs,pairs.length,progressLabel);
+      updP(done,errs,pairs.length,fname);
 
       try{
         var blob;
         if(isPdf){
-          // PDFs: always direct via proxy, no quality change
           blob=await fetchViaProxy(url);
           statusMsg='Success (PDF, original quality preserved)';
           remarks='';
         }else if(bg==='enhance'){
-          // Enhanced quality: server-side 2x upscale + sharpen, same content
-          fname=fname.replace(/\.[^.]+$/,'.jpg'); // always JPEG output
+          // Client-side enhance: fetch via proxy, draw on canvas with sharpening filter
+          var outFmt=fmt==='original'?'jpg':fmt;
+          if(fmt==='original')fname=fname.replace(/\.[^.]+$/,'.jpg');
           try{
-            var enhRes = await fetch('/api/enhance-img', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ url: url })
+            var eResp = await fetch(proxyUrl(url));
+            if(!eResp.ok) throw new Error('HTTP '+eResp.status);
+            var eBlob = await eResp.blob();
+            var eImg  = new Image();
+            var eUrl  = URL.createObjectURL(eBlob);
+            blob = await new Promise(function(er,ej){
+              eImg.onload = function(){
+                URL.revokeObjectURL(eUrl);
+                var c   = document.createElement('canvas');
+                c.width  = eImg.naturalWidth;
+                c.height = eImg.naturalHeight;
+                var ctx = c.getContext('2d');
+                // CSS filter sharpening via canvas
+                ctx.filter = 'contrast(1.08) saturate(1.1) brightness(1.02)';
+                ctx.drawImage(eImg,0,0);
+                ctx.filter = 'none';
+                var m=fmt==='png'?'image/png':(fmt==='webp'?'image/webp':'image/jpeg');
+                c.toBlob(function(b){b?er(b):ej(new Error('toBlob failed'));},m,1.0);
+              };
+              eImg.onerror=function(){URL.revokeObjectURL(eUrl);ej(new Error('Image load failed'));};
+              eImg.src=eUrl;
             });
-            if(!enhRes.ok){
-              var ed = await enhRes.json().catch(function(){return {};});
-              throw new Error(ed.error || 'HTTP '+enhRes.status);
-            }
-            // Read enhancement stats from response headers
-            var enhPct    = enhRes.headers.get('X-Enhancement-Percent');
-            var origRes   = enhRes.headers.get('X-Original-Resolution')  || '';
-            var enhResHdr = enhRes.headers.get('X-Enhanced-Resolution')  || '';
-            var origKB    = enhRes.headers.get('X-Original-Size')        || '';
-            var enhKB     = enhRes.headers.get('X-Enhanced-Size')        || '';
-            enhPct = enhPct !== null ? parseInt(enhPct, 10) : null;
-
-            blob = await enhRes.blob();
-
-            // Build badge text shown in progress
-            var badgeText, badgeColor;
-            if(enhPct === null){
-              badgeText  = '✨ Enhanced';
-              badgeColor = '#22c55e';
-            } else if(enhPct >= 10){
-              badgeText  = '✨ +' + enhPct + '% Sharper';
-              badgeColor = '#22c55e';
-            } else if(enhPct >= 1){
-              badgeText  = '✨ +' + enhPct + '% (slight)';
-              badgeColor = '#f59e0b';
-            } else if(enhPct >= 0){
-              badgeText  = '⚡ Minimal improvement (' + enhPct + '%)';
-              badgeColor = '#f59e0b';
-            } else {
-              badgeText  = '⚠ Already sharp (' + enhPct + '%)';
-              badgeColor = '#94a3b8';
-            }
-
-            // Show per-image badge in the live progress bar area
-            dlStat.innerHTML =
-              '<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;font-size:0.78rem;font-weight:700;background:'+badgeColor+'22;color:'+badgeColor+';border:1px solid '+badgeColor+'44;">'
-              + badgeText
-              + '</span>'
-              + ' &nbsp;<span style="color:var(--text3);font-size:0.72rem;">'
-              + (origRes ? origRes + ' → ' + enhResHdr : '')
-              + (origKB  ? ' &nbsp;|&nbsp; ' + origKB + ' KB → ' + enhKB + ' KB' : '')
-              + '</span>';
-
-            statusMsg = 'Success (Enhanced: '+badgeText+', 2x upscale Lanczos3+Sharpen, JPG 95%)';
-            remarks   = 'Quality improved: '+badgeText
-              + (origRes ? '. Resolution: '+origRes+' → '+enhResHdr : '')
-              + (origKB  ? '. Size: '+origKB+' KB → '+enhKB+' KB' : '')
-              + '. Image content unchanged.';
+            statusMsg='Success (Enhanced: contrast+saturation boost, saved as '+outFmt.toUpperCase()+')';
+            remarks='Client-side enhancement applied. Image content unchanged.';
           }catch(ce){
             blob=await fetchViaProxy(url);
-            dlStat.innerHTML = '<span style="color:var(--red);font-size:0.78rem;">⚠ Enhancement failed for: '+fname+'</span>';
             statusMsg='Warning (Enhancement failed, original downloaded)';
-            remarks='Reason: '+ce.message+'. Original file saved instead.';
+            remarks='Reason: '+ce.message;
             okFlag='warn';errs++;done--;
           }
         }else if(bg==='white'){
