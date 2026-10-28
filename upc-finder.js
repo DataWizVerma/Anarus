@@ -124,16 +124,19 @@ function extractFromCleanText(text, sourceUrl, defaultSourceType) {
   const clean = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
   const patterns = [
-    // 1. Prefix: UPC / GTIN / Barcode / EAN prefix
-    // Matches: UPC697666848994, UPC 697666848994, UPC#697666848994, UPC #697666848994,
-    // UPC: #697666848994, UPC Code #697666848994, UPC/GTIN: #697666848994, UPC No. #697666848994, etc.
-    /(?:upc(?:-?[a-z]+)?|gtin(?:-?(?:12|13|14))?|barcode|ean(?:-?(?:13|8))?|bar\s*code|universal\s*product\s*code)(?:\s*(?:\/|\band\b|\bor\b)\s*(?:upc|gtin|ean|barcode))?(?:\s*(?:code|number|num|no\.?|id|symbol))?(?:\s*\([^)]*\))?\s*[:#=\-,\s]*\s*#?\s*([0-9]{11,14})(?=[^0-9]|$)/gi,
+    // 1. Prefix: UPC / GTIN / Barcode / EAN prefix with optional hash/punctuation after separator
+    // Matches: UPC697, UPC: 697, UPC #697, UPC: #697, UPC Code: #697, UPC/GTIN: #697, etc.
+    // Also: trailing period — UPC: 697666850065.  -> lookahead allows [.,;)] as terminators
+    /(?:upc(?:-?[a-z]+)?|gtin(?:-?(?:12|13|14))?|barcode|ean(?:-?(?:13|8))?|bar\s*code|universal\s*product\s*code)(?:\s*(?:\/|\band\b|\bor\b)\s*(?:upc|gtin|ean|barcode))?(?:\s*(?:code|number|num|no\.?|id|symbol))?(?:\s*\([^)]*\))?\s*[:#=\-,\s]*\s*#?\s*([0-9]{11,14})(?=[^0-9.,;)]|$)/gi,
 
-    // 2. Trailing indicator (e.g. 697666848994 UPC)
-    /(?:^|[^0-9])([0-9]{11,14})\s*[:#=\-,\s]*\s*(?:upc|gtin|barcode|ean)\b/gi,
+    // 2. Trailing indicator: "697666850065. UPC" / "697666850065, UPC" / "697666850065 UPC"
+    /(?:^|[^0-9])([0-9]{11,14})[.,;):\s]*(?:upc|gtin|barcode|ean)\b/gi,
 
     // 3. Standalone hash followed by 11-14 digits: #697666848994 or # 697666848994
     /#\s*([0-9]{11,14})(?=[^0-9]|$)/gi,
+
+    // 4. Natural language: "UPC for this item is 697666850065" / "barcode is 697666850065."
+    /(?:upc|gtin|barcode|ean|universal\s*product\s*code)(?:[^0-9]{1,80})([0-9]{11,14})(?=[^0-9]|$)/gi,
   ];
 
   for (const pat of patterns) {
