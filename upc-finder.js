@@ -1,23 +1,21 @@
 /**
- * UPC Finder Engine v3 for BlazeTools
+ * UPC Finder Engine v4 for BlazeTools
  * Data Entry Specialist Engine: High-accuracy UPC/GTIN/EAN lookup
- * Prioritizes Manufacturer site -> Distributors. Excludes Amazon & eBay.
+ * Prioritizes Manufacturer site -> Distributors. Strictly excludes Amazon & eBay.
  * 
- * Supports:
- * - 11-digit UPCs (auto-prepends leading 0 to make 12 digits, e.g. 69766619669 -> 069766619669)
- * - 12-digit UPC-A
- * - 13-digit EAN-13
- * - 14-digit GTIN-14
- * - Checksum awareness without discarding valid distributor codes
- * - Direct distributor searches (Gekko-inc, PumpCatalog, etc.)
- * - DuckDuckGo Lite multi-query search with full URL extraction
+ * Features:
+ * - Snippet + Live Page extraction (captures UPCs even when sites require login/JS)
+ * - HTML tag stripping before matching so <b>UPC</b> or <span class="label">UPC</span> matches
+ * - Handles all UPC formats: UPC123456789012, UPC: ..., UPC #..., UPC-A, GTIN, EAN, Barcode
+ * - Normalizes 11-digit codes with leading zero (e.g. 697666197450 or 69766619669 -> 069766619669)
+ * - Multi-query search via POST to DuckDuckGo Lite (avoids 202 bot challenges)
+ * - Direct industrial distributor search (Gekko-inc, etc.)
+ * - Consensus voting & conflict detection
  */
 
 const axios = require('axios');
 
-const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)';
 
 // ─── UPC / EAN Check-Digit Calculation ───────────────────────────────────────
 function checksumUPCA(str) {
@@ -98,7 +96,7 @@ function getHostName(url) {
 }
 
 // ─── Fetch web page safely ───────────────────────────────────────────────────
-async function fetchPage(url, timeoutMs = 9000) {
+async function fetchPage(url, timeoutMs = 8000) {
   if (isExcludedDomain(url)) return null;
   try {
     const res = await axios({
@@ -120,7 +118,42 @@ async function fetchPage(url, timeoutMs = 9000) {
   }
 }
 
-// ─── Extract candidate barcodes from HTML ────────────────────────────────────
+// ─── Extract candidate barcodes from Clean Text (Snippets / Elements) ────────
+function extractFromCleanText(text, sourceUrl, defaultSourceType) {
+  const candidates = [];
+  if (!text) return candidates;
+  const sourceName = getHostName(sourceUrl);
+
+  // Strip all HTML tags & normalize whitespace
+  const clean = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+  const patterns = [
+    // UPC 123456789012, UPC: 123456789012, UPC#123456789012, UPC123456789012 (no space)
+    /(?:upc(?:-?a)?|gtin(?:-?12|-?13|-?14)?|barcode|ean(?:-?13)?|universal\s*product\s*code)\s*[:#=\-,\s]*\s*([0-9]{11,14})\b/gi,
+    // 123456789012 UPC
+    /\b([0-9]{11,14})\s*[:#=\-,\s]*\s*(?:upc|gtin|barcode|ean)\b/gi,
+  ];
+
+  for (const pat of patterns) {
+    let m;
+    while ((m = pat.exec(clean)) !== null) {
+      const bc = parseBarcode(m[1]);
+      if (bc) {
+        candidates.push({
+          ...bc,
+          source: sourceUrl,
+          sourceType: defaultSourceType,
+          sourceName,
+          field: 'text-pattern',
+        });
+      }
+    }
+  }
+
+  return candidates;
+}
+
+// ─── Extract candidate barcodes from Full HTML Page ──────────────────────────
 function extractCandidatesFromHtml(html, pageUrl, defaultSourceType) {
   const candidates = [];
   if (!html) return candidates;
@@ -156,6 +189,13 @@ function extractCandidatesFromHtml(html, pageUrl, defaultSourceType) {
       if (bc) candidates.push({ ...bc, source: pageUrl, sourceType: defaultSourceType, sourceName, field: m[1] });
     }
   }
+  const metaRe2 = /<meta[^>]+content=["']([^"']+?)["'][^>]+(?:property|name|itemprop)=["']([^"']*?)["']/gi;
+  while ((m = metaRe2.exec(html)) !== null) {
+    if (/upc|gtin|ean|barcode/i.test(m[2])) {
+      const bc = parseBarcode(m[1]);
+      if (bc) candidates.push({ ...bc, source: pageUrl, sourceType: defaultSourceType, sourceName, field: m[2] });
+    }
+  }
 
   // 3. Data attributes
   const dataAttrRe = /data-(?:upc|gtin|ean|barcode)=["']([^"']+)["']/gi;
@@ -164,20 +204,25 @@ function extractCandidatesFromHtml(html, pageUrl, defaultSourceType) {
     if (bc) candidates.push({ ...bc, source: pageUrl, sourceType: defaultSourceType, sourceName, field: 'data-attr' });
   }
 
-  // 4. Text near UPC / Barcode / GTIN keywords (supports 11-14 digits)
-  const keywordPatterns = [
-    /(?:upc(?:-?a)?|gtin(?:-?12|-?13|-?14)?|barcode|ean(?:-?13)?|universal\s*product\s*code)\s*[:#=\-,\s]+\s*([0-9]{11,14})\b/gi,
-    /\b([0-9]{11,14})\s*[:#=\-,\s]+\s*(?:upc|gtin|barcode|ean)\b/gi,
-    /<t[hd][^>]*>[^<]*(?:upc|gtin|ean|barcode)[^<]*<\/t[hd]>\s*<td[^>]*>\s*([0-9]{11,14})\s*<\/td>/gi,
-    /<(?:span|div|dd|p|li)[^>]*>[^<]*(?:upc|gtin|ean|barcode)[^<]*<\/(?:span|div|dd|p|li)>\s*(?:<[^>]+>\s*)*([0-9]{11,14})\b/gi,
-  ];
-
-  for (const pat of keywordPatterns) {
-    while ((m = pat.exec(html)) !== null) {
-      const bc = parseBarcode(m[1]);
-      if (bc) candidates.push({ ...bc, source: pageUrl, sourceType: defaultSourceType, sourceName, field: 'text-pattern' });
-    }
+  // 4. HTML Table Cells (e.g. <th>UPC</th><td>697666197450</td>)
+  const tdPattern = /<t[hd][^>]*>[^<]*(?:upc|gtin|ean|barcode)[^<]*<\/t[hd]>\s*<td[^>]*>([\s\S]*?)<\/td>/gi;
+  while ((m = tdPattern.exec(html)) !== null) {
+    const rawVal = m[1].replace(/<[^>]+>/g, '').trim();
+    const bc = parseBarcode(rawVal);
+    if (bc) candidates.push({ ...bc, source: pageUrl, sourceType: defaultSourceType, sourceName, field: 'table-cell' });
   }
+
+  // 5. Definition Lists (e.g. <dt>UPC</dt><dd>697666197450</dd>)
+  const dlPattern = /<dt[^>]*>[^<]*(?:upc|gtin|ean|barcode)[^<]*<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi;
+  while ((m = dlPattern.exec(html)) !== null) {
+    const rawVal = m[1].replace(/<[^>]+>/g, '').trim();
+    const bc = parseBarcode(rawVal);
+    if (bc) candidates.push({ ...bc, source: pageUrl, sourceType: defaultSourceType, sourceName, field: 'def-list' });
+  }
+
+  // 6. Clean text pattern scan across entire page body
+  const textCands = extractFromCleanText(html, pageUrl, defaultSourceType);
+  candidates.push(...textCands);
 
   return candidates;
 }
@@ -189,12 +234,11 @@ async function checkDirectDistributors(brand, itemNo) {
 
   const cleanItem = encodeURIComponent(itemNo.trim());
 
-  // 1. Gekko-inc search (contains massive industrial & pump catalog with exact UPCs)
+  // 1. Gekko-inc search (massive distributor catalog with exact UPCs)
   try {
     const gekkoSearchUrl = `http://www.gekko-inc.com/store/search?orderby=position&orderway=desc&search_query=${cleanItem}`;
     const searchRes = await fetchPage(gekkoSearchUrl, 7000);
     if (searchRes) {
-      // Find direct product link
       const productLinkMatch = searchRes.match(/href="(http:\/\/www\.gekko-inc\.com\/store\/[a-z0-9\-_/]+\.html)"/i);
       if (productLinkMatch) {
         const prodUrl = productLinkMatch[1];
@@ -207,20 +251,10 @@ async function checkDirectDistributors(brand, itemNo) {
     }
   } catch (_) {}
 
-  // 2. WaterPumpsPro search
-  try {
-    const wppSearchUrl = `https://waterpumpspro.com/search?q=${cleanItem}`;
-    const wppHtml = await fetchPage(wppSearchUrl, 7000);
-    if (wppHtml) {
-      const wppUpcs = extractCandidatesFromHtml(wppHtml, wppSearchUrl, 'Distributor Site');
-      candidates.push(...wppUpcs);
-    }
-  } catch (_) {}
-
   return candidates;
 }
 
-// ─── Web Search via DuckDuckGo Lite ──────────────────────────────────────────
+// ─── Web Search via DuckDuckGo Lite (POST Method) ────────────────────────────
 async function searchWebDistributors(brand, itemNo, productType) {
   const candidates = [];
   if (!itemNo) return candidates;
@@ -237,44 +271,59 @@ async function searchWebDistributors(brand, itemNo, productType) {
   const visitedUrls = new Set();
 
   for (const q of queries) {
-    if (candidates.length > 0) break; // If already found, skip additional searches to remain fast
+    if (candidates.length > 0) break; // If already found, stop early to maintain speed
 
     try {
-      const ddgRes = await axios.get('https://lite.duckduckgo.com/lite/', {
-        params: { q },
-        timeout: 9000,
+      const postBody = `q=${encodeURIComponent(q)}`;
+      const ddgRes = await axios.post('https://lite.duckduckgo.com/lite/', postBody, {
+        timeout: 8000,
         headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': USER_AGENT,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
         },
       });
 
       if (!ddgRes.data) continue;
 
-      // Extract result URLs from DuckDuckGo uddg redirect links
-      const uddgRe = /href=['"]([^'"]*uddg=([^'"&]+)[^'"]*)['"]/gi;
-      let m;
-      const targetUrls = [];
+      const html = ddgRes.data;
+      const linkMatches = [...html.matchAll(/<a[^>]+class=['"]result-link['"][^>]*>([\s\S]*?)<\/a>/gi)];
+      const snippetMatches = [...html.matchAll(/<td class=['"]result-snippet['"]>([\s\S]*?)<\/td>/gi)];
 
-      while ((m = uddgRe.exec(ddgRes.data)) !== null) {
-        const decoded = decodeURIComponent(m[2]);
-        if (decoded.startsWith('http') && !isExcludedDomain(decoded)) {
-          if (!visitedUrls.has(decoded) && targetUrls.length < 5) {
-            targetUrls.push(decoded);
-            visitedUrls.add(decoded);
-          }
+      const maxResults = Math.min(linkMatches.length, snippetMatches.length);
+
+      for (let i = 0; i < maxResults; i++) {
+        const linkTag = linkMatches[i][0];
+        const rawHrefMatch = linkTag.match(/href=['"]([^'"]+)['"]/i);
+        let url = rawHrefMatch ? rawHrefMatch[1] : '';
+
+        // Decode uddg if wrapped in DuckDuckGo redirect
+        if (url.includes('uddg=')) {
+          const uddgMatch = url.match(/uddg=([^'"&]+)/i);
+          if (uddgMatch) url = decodeURIComponent(uddgMatch[1]);
         }
-      }
+        if (url.startsWith('//')) url = 'https:' + url;
 
-      // Check each distributor page
-      for (const targetUrl of targetUrls) {
-        const pageHtml = await fetchPage(targetUrl, 7000);
-        if (pageHtml) {
-          const found = extractCandidatesFromHtml(pageHtml, targetUrl, 'Distributor Site');
-          if (found.length) {
-            candidates.push(...found);
-            break; // Found on this distributor, stop checking more pages
+        // Skip excluded domains (Amazon & eBay)
+        if (!url || isExcludedDomain(url)) continue;
+
+        // 1. Check Snippet directly! (Captures UPC from search engine index even if live page blocks)
+        const snipRaw = snippetMatches[i][1];
+        const snipCands = extractFromCleanText(snipRaw, url, 'Distributor Site');
+        if (snipCands.length) {
+          candidates.push(...snipCands);
+          break; // Found high-accuracy snippet match, stop checking further results for this query
+        }
+
+        // 2. If not in snippet, visit live distributor page (top 3 results)
+        if (i < 3 && !visitedUrls.has(url)) {
+          visitedUrls.add(url);
+          const pageHtml = await fetchPage(url, 7000);
+          if (pageHtml) {
+            const pageCands = extractCandidatesFromHtml(pageHtml, url, 'Distributor Site');
+            if (pageCands.length) {
+              candidates.push(...pageCands);
+              break;
+            }
           }
         }
       }
@@ -436,7 +485,7 @@ async function findUpcForItem(item) {
     }
   }
 
-  // STAGE 2: Direct Industrial / Distributor Check
+  // STAGE 2: Direct Industrial / Distributor Check (Gekko-inc, etc.)
   if (allCandidates.length === 0) {
     try {
       const directUpcs = await checkDirectDistributors(brand, itemNo);
@@ -444,7 +493,7 @@ async function findUpcForItem(item) {
     } catch (_) {}
   }
 
-  // STAGE 3: Web Search via DuckDuckGo Lite
+  // STAGE 3: Web Search via DuckDuckGo Lite (Snippets + Live Pages)
   if (allCandidates.length === 0) {
     try {
       const webUpcs = await searchWebDistributors(brand, itemNo, productType);
