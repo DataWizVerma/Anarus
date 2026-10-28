@@ -124,17 +124,28 @@ function extractFromCleanText(text, sourceUrl, defaultSourceType) {
   const clean = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
   const patterns = [
-    // UPC 123456789012, UPC: 123456789012, UPC#123456789012, UPC123456789012 (no space)
-    /(?:upc(?:-?a)?|gtin(?:-?12|-?13|-?14)?|barcode|ean(?:-?13)?|universal\s*product\s*code)\s*[:#=\-,\s]*\s*([0-9]{11,14})\b/gi,
-    // 123456789012 UPC
-    /\b([0-9]{11,14})\s*[:#=\-,\s]*\s*(?:upc|gtin|barcode|ean)\b/gi,
+    // 1. Prefix: UPC / GTIN / Barcode / EAN prefix
+    // Matches: UPC697666848994, UPC 697666848994, UPC#697666848994, UPC #697666848994,
+    // UPC: #697666848994, UPC Code #697666848994, UPC/GTIN: #697666848994, UPC No. #697666848994, etc.
+    /(?:upc(?:-?[a-z]+)?|gtin(?:-?(?:12|13|14))?|barcode|ean(?:-?(?:13|8))?|bar\s*code|universal\s*product\s*code)(?:\s*(?:\/|\band\b|\bor\b)\s*(?:upc|gtin|ean|barcode))?(?:\s*(?:code|number|num|no\.?|id|symbol))?(?:\s*\([^)]*\))?\s*[:#=\-,\s]*\s*#?\s*([0-9]{11,14})(?=[^0-9]|$)/gi,
+
+    // 2. Trailing indicator (e.g. 697666848994 UPC)
+    /(?:^|[^0-9])([0-9]{11,14})\s*[:#=\-,\s]*\s*(?:upc|gtin|barcode|ean)\b/gi,
+
+    // 3. Standalone hash followed by 11-14 digits: #697666848994 or # 697666848994
+    /#\s*([0-9]{11,14})(?=[^0-9]|$)/gi,
   ];
 
   for (const pat of patterns) {
     let m;
     while ((m = pat.exec(clean)) !== null) {
+      const isStandaloneHash = pat.source.startsWith('/#') || pat.source.startsWith('#');
       const bc = parseBarcode(m[1]);
       if (bc) {
+        // If captured solely by standalone '#', require either valid checksum or UPC keyword present in text
+        if (isStandaloneHash && !bc.checksumValid && !/upc|gtin|barcode|ean/i.test(clean)) {
+          continue;
+        }
         candidates.push({
           ...bc,
           source: sourceUrl,
@@ -208,7 +219,15 @@ function extractCandidatesFromHtml(html, pageUrl, defaultSourceType) {
     if (bc) candidates.push({ ...bc, source: pageUrl, sourceType: defaultSourceType, sourceName, field: 'table-cell' });
   }
 
-  // 5. Clean text pattern scan across entire page body
+  // 5. Definition Lists (e.g. <dt>UPC</dt><dd>#697666848994</dd>)
+  const dlPattern = /<dt[^>]*>[^<]*(?:upc|gtin|ean|barcode)[^<]*<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi;
+  while ((m = dlPattern.exec(html)) !== null) {
+    const rawVal = m[1].replace(/<[^>]+>/g, '').trim();
+    const bc = parseBarcode(rawVal);
+    if (bc) candidates.push({ ...bc, source: pageUrl, sourceType: defaultSourceType, sourceName, field: 'def-list' });
+  }
+
+  // 6. Clean text pattern scan across entire page body
   const textCands = extractFromCleanText(html, pageUrl, defaultSourceType);
   candidates.push(...textCands);
 
@@ -220,7 +239,7 @@ async function checkDirectDistributors(brand, itemNo) {
   const candidates = [];
   if (!itemNo) return candidates;
 
-  const cleanItem = encodeURIComponent(itemNo.trim());
+  const cleanItem = encodeURIComponent((itemNo || '').replace(/^(?:item\s*#?|part\s*#?|#)\s*/i, '').trim());
 
   // 1. Gekko-inc search
   try {
@@ -245,7 +264,7 @@ async function checkDirectDistributors(brand, itemNo) {
 // ─── Generate Smart Search Queries ───────────────────────────────────────────
 function buildSearchQueries(itemNo, brand, productType) {
   const queries = [];
-  const cleanItem = itemNo.trim();
+  const cleanItem = (itemNo || '').replace(/^(?:item\s*#?|part\s*#?|#)\s*/i, '').trim();
 
   if (brand) {
     const noDots = brand.replace(/\./g, '').trim(); // e.g. A.Y. McDonald -> AY McDonald
@@ -484,6 +503,24 @@ async function findUpcForItem(item) {
 
   const allCandidates = [];
 
+  // STAGE 0: Check if itemNo or description already contains a formatted UPC (e.g. UPC697666848994 or #697666848994)
+  if (itemNo) {
+    const directBc = parseBarcode(itemNo);
+    if (directBc && directBc.checksumValid) {
+      allCandidates.push({
+        ...directBc,
+        source: 'Uploaded File',
+        sourceType: 'File Data',
+        sourceName: 'Item No Column',
+        field: 'itemNo',
+      });
+    }
+  }
+  if (description) {
+    const descCands = extractFromCleanText(description, 'Uploaded File', 'File Data');
+    allCandidates.push(...descCands);
+  }
+
   // STAGE 1: Check Manufacturer Reference Link (if provided)
   if (refLink && /^https?:\/\//i.test(refLink) && !isExcludedDomain(refLink)) {
     const mfgHtml = await fetchPage(refLink, 10000);
@@ -528,4 +565,8 @@ async function findUpcForItem(item) {
 module.exports = {
   findUpcForItem,
   parseBarcode,
+  checksumUPCA,
+  checksumEAN13,
+  extractFromCleanText,
+  extractCandidatesFromHtml,
 };

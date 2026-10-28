@@ -3398,7 +3398,9 @@ dlBtn.addEventListener('click',async function(){
     const current = item.upc || '';
     const newUpc = prompt(`Enter verified UPC for Item "${item.itemNo || item.description}":`, current);
     if (newUpc !== null && newUpc.trim() !== '') {
-      item.upc = newUpc.trim();
+      const cleanDigits = newUpc.replace(/[^0-9]/g, '');
+      const finalVal = (cleanDigits.length >= 11 && cleanDigits.length <= 14) ? cleanDigits : newUpc.trim();
+      item.upc = finalVal;
       item.status = 'Verified (Manual)';
       item.statusType = 'verified';
       item.reviewNotes = 'Manually verified by specialist.';
@@ -3416,11 +3418,13 @@ dlBtn.addEventListener('click',async function(){
     const finalUpc = customInp ? customInp.value.trim() : modalSelectedUpc;
 
     if (finalUpc) {
+      const cleanDigits = finalUpc.replace(/[^0-9]/g, '');
+      const finalVal = (cleanDigits.length >= 11 && cleanDigits.length <= 14) ? cleanDigits : finalUpc.trim();
       const item = upcResults[activeModalIdx];
-      item.upc = finalUpc;
+      item.upc = finalVal;
       item.status = 'Verified (Reviewed)';
       item.statusType = 'verified';
-      item.reviewNotes = `Specialist resolved conflict. Selected UPC: ${finalUpc}`;
+      item.reviewNotes = `Specialist resolved conflict. Selected UPC: ${finalVal}`;
       updateSingleTableRow(activeModalIdx);
       updateCounters();
       showToast(`Saved selection for row #${activeModalIdx + 1}!`, 'success');
