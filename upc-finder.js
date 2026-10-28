@@ -1,16 +1,7 @@
 /**
- * UPC Finder Engine v4 for BlazeTools
+ * UPC Finder Engine v5 for BlazeTools
  * Data Entry Specialist Engine: High-accuracy UPC/GTIN/EAN lookup
  * Prioritizes Manufacturer site -> Distributors. Strictly excludes Amazon & eBay.
- * 
- * Features:
- * - Snippet + Live Page extraction (captures UPCs even when sites require login/JS)
- * - HTML tag stripping before matching so <b>UPC</b> or <span class="label">UPC</span> matches
- * - Handles all UPC formats: UPC123456789012, UPC: ..., UPC #..., UPC-A, GTIN, EAN, Barcode
- * - Normalizes 11-digit codes with leading zero (e.g. 697666197450 or 69766619669 -> 069766619669)
- * - Multi-query search via POST to DuckDuckGo Lite (avoids 202 bot challenges)
- * - Direct industrial distributor search (Gekko-inc, etc.)
- * - Consensus voting & conflict detection
  */
 
 const axios = require('axios');
@@ -44,35 +35,41 @@ function checksumEAN13(str) {
 
 /**
  * Normalizes barcode numbers:
- * - 11 digits: adds leading 0 (e.g. 69766619669 -> 069766619669)
  * - 12 digits: UPC-A
  * - 13 digits: EAN-13
+ * - 11 digits: missing leading 0 (e.g. 697666197450) -> returns with pad
  * - 14 digits: GTIN-14 -> extracts inner 12 or 13 digits
  */
 function parseBarcode(raw) {
   if (!raw) return null;
   let clean = String(raw).replace(/[^0-9]/g, '');
 
-  // Reject invalid / dummy sequences
   if (/^(\d)\1+$/.test(clean)) return null;
   if (clean === '123456789012') return null;
 
+  // 12 digits
+  if (clean.length === 12) {
+    return { code: clean, checksumValid: checksumUPCA(clean), is12: true };
+  }
+  // 13 digits
+  if (clean.length === 13) {
+    return { code: clean, checksumValid: checksumEAN13(clean), is12: false };
+  }
   // 11 digits -> pad leading zero
   if (clean.length === 11) {
-    clean = '0' + clean;
+    const padded = '0' + clean;
+    return { code: padded, checksumValid: checksumUPCA(padded), is12: false, was11: true };
   }
-
   // 14 digits -> extract inner UPC/EAN
   if (clean.length === 14) {
-    if (clean.startsWith('00')) clean = clean.substring(2);
-    else if (clean.startsWith('0')) clean = clean.substring(1);
-  }
-
-  if (clean.length === 12) {
-    return { code: clean, checksumValid: checksumUPCA(clean) };
-  }
-  if (clean.length === 13) {
-    return { code: clean, checksumValid: checksumEAN13(clean) };
+    if (clean.startsWith('00')) {
+      const inner = clean.substring(2);
+      return { code: inner, checksumValid: checksumUPCA(inner), is12: true };
+    }
+    if (clean.startsWith('0')) {
+      const inner = clean.substring(1);
+      return { code: inner, checksumValid: checksumEAN13(inner), is12: false };
+    }
   }
   return null;
 }
@@ -124,7 +121,6 @@ function extractFromCleanText(text, sourceUrl, defaultSourceType) {
   if (!text) return candidates;
   const sourceName = getHostName(sourceUrl);
 
-  // Strip all HTML tags & normalize whitespace
   const clean = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
   const patterns = [
@@ -204,7 +200,7 @@ function extractCandidatesFromHtml(html, pageUrl, defaultSourceType) {
     if (bc) candidates.push({ ...bc, source: pageUrl, sourceType: defaultSourceType, sourceName, field: 'data-attr' });
   }
 
-  // 4. HTML Table Cells (e.g. <th>UPC</th><td>697666197450</td>)
+  // 4. HTML Table Cells
   const tdPattern = /<t[hd][^>]*>[^<]*(?:upc|gtin|ean|barcode)[^<]*<\/t[hd]>\s*<td[^>]*>([\s\S]*?)<\/td>/gi;
   while ((m = tdPattern.exec(html)) !== null) {
     const rawVal = m[1].replace(/<[^>]+>/g, '').trim();
@@ -212,15 +208,7 @@ function extractCandidatesFromHtml(html, pageUrl, defaultSourceType) {
     if (bc) candidates.push({ ...bc, source: pageUrl, sourceType: defaultSourceType, sourceName, field: 'table-cell' });
   }
 
-  // 5. Definition Lists (e.g. <dt>UPC</dt><dd>697666197450</dd>)
-  const dlPattern = /<dt[^>]*>[^<]*(?:upc|gtin|ean|barcode)[^<]*<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi;
-  while ((m = dlPattern.exec(html)) !== null) {
-    const rawVal = m[1].replace(/<[^>]+>/g, '').trim();
-    const bc = parseBarcode(rawVal);
-    if (bc) candidates.push({ ...bc, source: pageUrl, sourceType: defaultSourceType, sourceName, field: 'def-list' });
-  }
-
-  // 6. Clean text pattern scan across entire page body
+  // 5. Clean text pattern scan across entire page body
   const textCands = extractFromCleanText(html, pageUrl, defaultSourceType);
   candidates.push(...textCands);
 
@@ -234,15 +222,15 @@ async function checkDirectDistributors(brand, itemNo) {
 
   const cleanItem = encodeURIComponent(itemNo.trim());
 
-  // 1. Gekko-inc search (massive distributor catalog with exact UPCs)
+  // 1. Gekko-inc search
   try {
     const gekkoSearchUrl = `http://www.gekko-inc.com/store/search?orderby=position&orderway=desc&search_query=${cleanItem}`;
-    const searchRes = await fetchPage(gekkoSearchUrl, 7000);
+    const searchRes = await fetchPage(gekkoSearchUrl, 6000);
     if (searchRes) {
       const productLinkMatch = searchRes.match(/href="(http:\/\/www\.gekko-inc\.com\/store\/[a-z0-9\-_/]+\.html)"/i);
       if (productLinkMatch) {
         const prodUrl = productLinkMatch[1];
-        const prodHtml = await fetchPage(prodUrl, 7000);
+        const prodHtml = await fetchPage(prodUrl, 6000);
         if (prodHtml) {
           const upcs = extractCandidatesFromHtml(prodHtml, prodUrl, 'Distributor Site');
           candidates.push(...upcs);
@@ -254,25 +242,40 @@ async function checkDirectDistributors(brand, itemNo) {
   return candidates;
 }
 
+// ─── Generate Smart Search Queries ───────────────────────────────────────────
+function buildSearchQueries(itemNo, brand, productType) {
+  const queries = [];
+  const cleanItem = itemNo.trim();
+
+  if (brand) {
+    const noDots = brand.replace(/\./g, '').trim(); // e.g. A.Y. McDonald -> AY McDonald
+    const cleanBrand = brand.replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+    if (noDots && noDots !== brand) {
+      queries.push(`${cleanItem} ${noDots} UPC`);
+    }
+    queries.push(`${cleanItem} ${cleanBrand} UPC`);
+    queries.push(`${cleanItem} ${cleanBrand}`);
+  } else {
+    queries.push(`${cleanItem} UPC`);
+  }
+
+  if (productType) {
+    queries.push(`${cleanItem} ${productType} UPC`);
+  }
+
+  return [...new Set(queries)].slice(0, 3);
+}
+
 // ─── Web Search via DuckDuckGo Lite (POST Method) ────────────────────────────
 async function searchWebDistributors(brand, itemNo, productType) {
   const candidates = [];
   if (!itemNo) return candidates;
 
-  // Build clean search queries
-  const queries = [];
-  if (brand) {
-    queries.push(`${itemNo} ${brand} UPC`);
-    queries.push(`${itemNo} ${brand}`);
-  } else {
-    queries.push(`${itemNo} UPC`);
-  }
-
+  const queries = buildSearchQueries(itemNo, brand, productType);
   const visitedUrls = new Set();
 
   for (const q of queries) {
-    if (candidates.length > 0) break; // If already found, stop early to maintain speed
-
     try {
       const postBody = `q=${encodeURIComponent(q)}`;
       const ddgRes = await axios.post('https://lite.duckduckgo.com/lite/', postBody, {
@@ -296,37 +299,37 @@ async function searchWebDistributors(brand, itemNo, productType) {
         const rawHrefMatch = linkTag.match(/href=['"]([^'"]+)['"]/i);
         let url = rawHrefMatch ? rawHrefMatch[1] : '';
 
-        // Decode uddg if wrapped in DuckDuckGo redirect
         if (url.includes('uddg=')) {
           const uddgMatch = url.match(/uddg=([^'"&]+)/i);
           if (uddgMatch) url = decodeURIComponent(uddgMatch[1]);
         }
         if (url.startsWith('//')) url = 'https:' + url;
 
-        // Skip excluded domains (Amazon & eBay)
         if (!url || isExcludedDomain(url)) continue;
 
-        // 1. Check Snippet directly! (Captures UPC from search engine index even if live page blocks)
+        // 1. Scan snippet from search engine
         const snipRaw = snippetMatches[i][1];
         const snipCands = extractFromCleanText(snipRaw, url, 'Distributor Site');
-        if (snipCands.length) {
-          candidates.push(...snipCands);
-          break; // Found high-accuracy snippet match, stop checking further results for this query
+        for (const sc of snipCands) {
+          candidates.push(sc);
         }
 
-        // 2. If not in snippet, visit live distributor page (top 3 results)
-        if (i < 3 && !visitedUrls.has(url)) {
+        // 2. If first 2 results, also visit live page
+        if (i < 2 && !visitedUrls.has(url)) {
           visitedUrls.add(url);
-          const pageHtml = await fetchPage(url, 7000);
+          const pageHtml = await fetchPage(url, 6000);
           if (pageHtml) {
             const pageCands = extractCandidatesFromHtml(pageHtml, url, 'Distributor Site');
-            if (pageCands.length) {
-              candidates.push(...pageCands);
-              break;
+            for (const pc of pageCands) {
+              candidates.push(pc);
             }
           }
         }
       }
+
+      // If we found any candidates for this query, stop checking further queries
+      if (candidates.length > 0) break;
+
     } catch (_) {}
   }
 
@@ -361,6 +364,7 @@ function resolveConsensus(candidates, refLinkProvided) {
         sources: [],
         hasMfg: false,
         checksumValid: cand.checksumValid,
+        is12: cand.is12,
       });
     }
     const entry = upcMap.get(cand.code);
@@ -374,14 +378,18 @@ function resolveConsensus(candidates, refLinkProvided) {
     }
     if (cand.sourceType === 'Manufacturer Site') entry.hasMfg = true;
     if (cand.checksumValid) entry.checksumValid = true;
+    if (cand.is12) entry.is12 = true;
   }
 
-  // Sort: hasMfg -> checksumValid -> count
+  // Sort: hasMfg -> (is12 && checksumValid) -> count
   const sorted = Array.from(upcMap.values()).sort((a, b) => {
     if (a.hasMfg && !b.hasMfg) return -1;
     if (!a.hasMfg && b.hasMfg) return 1;
-    if (a.checksumValid && !b.checksumValid) return -1;
-    if (!a.checksumValid && b.checksumValid) return 1;
+    // 12-digit with valid checksum takes highest priority
+    const aValid12 = a.is12 && a.checksumValid;
+    const bValid12 = b.is12 && b.checksumValid;
+    if (aValid12 && !bValid12) return -1;
+    if (!aValid12 && bValid12) return 1;
     return b.count - a.count;
   });
 
@@ -478,7 +486,7 @@ async function findUpcForItem(item) {
 
   // STAGE 1: Check Manufacturer Reference Link (if provided)
   if (refLink && /^https?:\/\//i.test(refLink) && !isExcludedDomain(refLink)) {
-    const mfgHtml = await fetchPage(refLink, 12000);
+    const mfgHtml = await fetchPage(refLink, 10000);
     if (mfgHtml) {
       const mfgUpcs = extractCandidatesFromHtml(mfgHtml, refLink, 'Manufacturer Site');
       allCandidates.push(...mfgUpcs);
