@@ -1000,8 +1000,11 @@
 
       <div id="excelStatus" style="text-align:center; color:var(--text3); margin-top:0.875rem; font-size:0.83rem;"></div>
       <div id="excelLoading" style="display:none; text-align:center; margin-top:0.875rem; color:var(--text2);">
-        <div class="spinner-dark" style="margin: 0 auto 0.5rem;"></div>
-        Processing...
+        <div style="width:100%; background:var(--surface2,#2a2a3e); border-radius:8px; overflow:hidden; height:22px; position:relative; border:1px solid var(--border);">
+          <div id="excelProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg,var(--green,#22c55e),var(--accent2,#06b6d4)); border-radius:8px; transition:width 0.2s ease;"></div>
+          <span id="excelProgressText" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:0.72rem; font-weight:600; color:var(--text); text-shadow:0 0 4px rgba(0,0,0,0.5);">0%</span>
+        </div>
+        <div id="excelProgressLabel" style="margin-top:0.35rem; font-size:0.76rem;">Processing...</div>
       </div>
 
       <div class="divider"></div>
@@ -1016,6 +1019,7 @@
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#008080;vertical-align:middle;margin-right:4px;"></span>Manufacturer Name inconsistency</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ff69b4;vertical-align:middle;margin-right:4px;"></span>in./lbs. in numeric-only column</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#98fb98;border:1px solid #aaa;vertical-align:middle;margin-right:4px;"></span>Proper Case / Desc starts with number</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#dc143c;vertical-align:middle;margin-right:4px;"></span>Broken Link</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#fffde7;border:1px solid #aaa;vertical-align:middle;margin-right:4px;"></span>Column issue summary (last row)</span>
         </div>
       </div>
@@ -2287,7 +2291,8 @@ processSheetsBtn.addEventListener('click', async () => {
   const selected = Array.from(document.querySelectorAll('.sheet-checkbox:checked')).map(c=>c.value);
   if (!selected.length) { showToast('Select at least one sheet', 'error'); return; }
 
-  excelLoading.style.display = 'block'; excelStatus.textContent = 'Processing...';
+  excelLoading.style.display = 'block'; excelStatus.textContent = '';
+  setProgress(0, 'Initializing...');
   processSheetsBtn.disabled = true;
   try {
     const newWb = new ExcelJS.Workbook();
@@ -2302,6 +2307,20 @@ processSheetsBtn.addEventListener('click', async () => {
     const TEAL   = fill('FF008080'); // manufacturer name inconsistency
     const PINK   = fill('FFFF69B4'); // in./lbs. unit suffix in numeric-only columns
     const LIME   = fill('FF98FB98'); // proper case issue / description starts with number
+    const BROKEN = fill('FFDC143C'); // broken link (crimson)
+
+    // Progress bar helpers
+    const progBar   = document.getElementById('excelProgressBar');
+    const progText  = document.getElementById('excelProgressText');
+    const progLabel = document.getElementById('excelProgressLabel');
+    function setProgress(pct, label) {
+      const p = Math.min(100, Math.max(0, Math.round(pct)));
+      progBar.style.width = p + '%';
+      progText.textContent = p + '%';
+      if (label) progLabel.textContent = label;
+    }
+    // Yield to UI thread so progress bar actually repaints
+    const yieldUI = () => new Promise(r => setTimeout(r, 0));
 
     // ── Columns that must contain ONLY numbers (no "in." / "lbs." text) ───────
     // Minor / function words that should be lowercase in proper case (unless first word)
@@ -2337,6 +2356,14 @@ processSheetsBtn.addEventListener('click', async () => {
       const isLongDesc = /long\s*desc/i.test(hdr);
       const isNumericCol = NUMERIC_ONLY_COLS.has(lhdr);
       const isCat = isCatCol(hdr);
+
+      // ── URL / link detection — skip all text-quality checks for URLs ──
+      const isUrl = /^https?:\/\//i.test(strVal.trim());
+      if (isUrl) {
+        // Only check for empty required field, nothing else (broken-link check is separate)
+        if (isMissing) issues.push('Empty required field');
+        return issues;
+      }
 
       // 1. Dot-only
       if (strVal === '.') issues.push('Dot-only value (.)');
@@ -2393,13 +2420,23 @@ processSheetsBtn.addEventListener('click', async () => {
         let sigWordIdx = 0; // counts only alphabetic-bearing tokens
         const caseProblems = [];
 
-        for (const token of tokens) {
+        for (let ti = 0; ti < tokens.length; ti++) {
+          const token = tokens[ti];
           // Strip leading/trailing punctuation to get the core word
           const core = token.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
           if (!core) continue;
           if (/^[\d\/\.\-]+$/.test(core)) { sigWordIdx++; continue; } // pure number / fraction — skip
           const alpha = core.replace(/[^a-zA-Z]/g, '');
           if (!alpha) { sigWordIdx++; continue; }
+
+          // Skip single-character tokens (like "x" as dimension separator)
+          if (alpha.length <= 1) { sigWordIdx++; continue; }
+
+          // Skip "in" when it follows a number (it's a unit, not a preposition)
+          if (alpha.toLowerCase() === 'in' && ti > 0) {
+            const prevCore = tokens[ti - 1].replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
+            if (/[\d\/\.\-]/.test(prevCore)) { sigWordIdx++; continue; }
+          }
 
           const isMinor = MINOR_WORDS.has(alpha.toLowerCase());
           const isFirst = sigWordIdx === 0;
@@ -2469,7 +2506,21 @@ processSheetsBtn.addEventListener('click', async () => {
       return RED;
     }
 
+    // ── Count total rows across all selected sheets for progress ─────────────
+    let totalRows = 0;
+    let hasAnyUrls = false;
     for (const sn of selected) {
+      const ws = excelWorkbook.getWorksheet(sn);
+      if (ws) totalRows += Math.max(0, ws.rowCount - 1);
+    }
+    let processedRows = 0;
+
+    // ── Collect all URL cells for broken-link checking ─────────────────────
+    const urlCells = []; // { sheetName, row, col, url, hdr }
+    const sheetMeta = {}; // sheetName -> { colIssueSet, colIdx, summaryRow }
+
+    for (let si = 0; si < selected.length; si++) {
+      const sn = selected[si];
       const orig = excelWorkbook.getWorksheet(sn); if (!orig) continue;
       const ns   = newWb.addWorksheet(sn);
 
@@ -2526,6 +2577,14 @@ processSheetsBtn.addEventListener('click', async () => {
       const colIssueSet = {}; // colName -> Set of issue strings
 
       for (let r = 2; r <= ns.rowCount; r++) {
+        // ── Progress update every 50 rows ──
+        processedRows++;
+        if (processedRows % 50 === 0 || r === ns.rowCount) {
+          const maxDataPct = urlCells.length > 0 ? 90 : 98; // reserve 10% for link checks if URLs exist
+          const pct = totalRows > 0 ? (processedRows / totalRows) * maxDataPct : 0;
+          setProgress(pct, `Checking sheet "${sn}" — row ${r - 1} of ${ns.rowCount - 1}...`);
+          await yieldUI();
+        }
         const row = ns.getRow(r);
 
         // Skip truly empty rows (no ItemNo and no data)
@@ -2554,6 +2613,11 @@ processSheetsBtn.addEventListener('click', async () => {
           const isPTMissing = isPrimaryPT && hasItemNo && (!strVal || strVal.trim() === '');
 
           const issues = getIssues(hdr, strVal, isMissing || isPTMissing);
+
+          // Collect URLs for broken-link checking
+          if (/^https?:\/\//i.test(strVal.trim())) {
+            urlCells.push({ sheetName: sn, row: r, col: cn, url: strVal.trim(), hdr });
+          }
 
           // Manufacturer Name inconsistency
           const isMfgCol = /manufacturer\s*name/i.test(hdr);
@@ -2587,7 +2651,80 @@ processSheetsBtn.addEventListener('click', async () => {
         cell.alignment = { wrapText: true, vertical: 'top' };
         ns.getRow(summaryRow).height = 60;
       }
+      // Store sheet metadata for broken-link summary pass
+      sheetMeta[sn] = { colIssueSet, colIdx, summaryRow };
     }
+
+    // ── Pass 5: Broken Link Checking ──────────────────────────────────────────
+    if (urlCells.length > 0) {
+      setProgress(90, `Checking ${urlCells.length} link(s) for broken URLs...`);
+      await yieldUI();
+
+      // Deduplicate URLs
+      const uniqueUrls = [...new Set(urlCells.map(u => u.url))];
+
+      // Check links in batches via server proxy (HEAD request)
+      const BATCH = 10;
+      const linkStatus = {}; // url -> { ok: bool, status: number, error: string }
+      for (let b = 0; b < uniqueUrls.length; b += BATCH) {
+        const batch = uniqueUrls.slice(b, b + BATCH);
+        const results = await Promise.allSettled(
+          batch.map(async url => {
+            try {
+              const resp = await fetch('/api/check-link?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout(15000) });
+              const data = await resp.json();
+              return { url, ok: data.ok, status: data.status, error: data.error || '' };
+            } catch (e) {
+              return { url, ok: false, status: 0, error: e.message };
+            }
+          })
+        );
+        results.forEach(r => {
+          if (r.status === 'fulfilled') linkStatus[r.value.url] = r.value;
+          else linkStatus[batch[0]] = { url: batch[0], ok: false, status: 0, error: 'timeout' };
+        });
+        const linkPct = 90 + ((b + batch.length) / uniqueUrls.length) * 10;
+        setProgress(linkPct, `Checked ${Math.min(b + BATCH, uniqueUrls.length)} of ${uniqueUrls.length} links...`);
+        await yieldUI();
+      }
+
+      // Mark broken links in the workbook and add to column summaries
+      for (const uc of urlCells) {
+        const ls = linkStatus[uc.url];
+        if (ls && !ls.ok) {
+          const ws = newWb.getWorksheet(uc.sheetName);
+          if (!ws) continue;
+          const cell = ws.getRow(uc.row).getCell(uc.col);
+          cell.fill = BROKEN;
+          // Add to column summary
+          const meta = sheetMeta[uc.sheetName];
+          if (meta && uc.hdr) {
+            if (!meta.colIssueSet[uc.hdr]) meta.colIssueSet[uc.hdr] = new Set();
+            meta.colIssueSet[uc.hdr].add(`Broken link detected (${ls.error || 'unreachable'})`);
+          }
+        }
+      }
+
+      // Re-write summary rows for sheets that got broken link issues
+      for (const [sn, meta] of Object.entries(sheetMeta)) {
+        const ws = newWb.getWorksheet(sn);
+        if (!ws) continue;
+        for (const [colName, issueSet] of Object.entries(meta.colIssueSet)) {
+          if (!issueSet.has || ![...issueSet].some(i => i.includes('Broken link'))) continue;
+          const cn = meta.colIdx[colName];
+          if (!cn) continue;
+          const cell = ws.getRow(meta.summaryRow).getCell(cn);
+          const issueList = [...issueSet].map(i => `• ${i}`).join('\n');
+          cell.value = `⚠ Issues in "${colName}":\n${issueList}`;
+          cell.fill = fill('FFFFF3CD');
+          cell.font = { bold: true, size: 9, color: { argb: 'FF7D4E00' } };
+          cell.alignment = { wrapText: true, vertical: 'top' };
+        }
+      }
+    }
+
+    setProgress(100, 'Generating file...');
+    await yieldUI();
 
     const buf = await newWb.xlsx.writeBuffer();
     const a   = document.createElement('a');
@@ -2597,6 +2734,7 @@ processSheetsBtn.addEventListener('click', async () => {
     a.click(); URL.revokeObjectURL(a.href);
     excelStatus.textContent = '✅ File downloaded!';
     excelLoading.style.display = 'none'; processSheetsBtn.disabled = false;
+    setProgress(100, 'Done!');
     showToast('✅ Excel processed and downloaded!', 'success');
     const bad = selected.filter(n=>n.includes('&'));
     excelWarning.textContent = bad.length ? `⚠ Sheet names contain '&': ${bad.join(', ')}` : '';
