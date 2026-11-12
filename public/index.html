@@ -2346,28 +2346,43 @@ processSheetsBtn.addEventListener('click', async () => {
       return true;
     }
 
-    // ── Helper: extract all valid URLs from any cell (hyperlink obj, formula, string) ──
+    // ── Helper: extract all valid URLs from any cell (hyperlink obj, formula, string, unencoded spaces) ──
     function extractUrlsFromCell(cell) {
       if (!cell || cell.value === undefined || cell.value === null) return [];
       const found = new Set();
-      const extract = str => {
-        if (!str || typeof str !== 'string') return;
-        const m = str.match(/https?:\/\/[^\s"'\<\>\)]+/gi);
-        if (m) m.forEach(u => {
-          const clean = u.replace(/[.,;]+$/, '').trim();
-          if (clean) found.add(clean);
-        });
+      const addUrl = raw => {
+        if (!raw || typeof raw !== 'string') return;
+        let s = raw.trim().replace(/^["']+|["']+$/g, '').trim();
+        if (!s) return;
+        // If the whole string starts with http:// or https:// (may contain spaces like "Cat 3RV-6.pdf")
+        if (/^https?:\/\//i.test(s)) {
+          const lines = s.split(/[\r\n]+/);
+          for (const line of lines) {
+            const l = line.trim().replace(/^["']+|["']+$/g, '').replace(/[.,;]+$/, '').trim();
+            if (/^https?:\/\//i.test(l)) {
+              found.add(l);
+            }
+          }
+        } else {
+          // If embedded inside text, match standard URL pattern
+          const m = s.match(/https?:\/\/[^\s"'\<\>\)]+/gi);
+          if (m) m.forEach(u => {
+            const clean = u.replace(/[.,;]+$/, '').trim();
+            if (clean) found.add(clean);
+          });
+        }
       };
-      if (cell.hyperlink) extract(cell.hyperlink);
+
+      if (cell.hyperlink) addUrl(cell.hyperlink);
       const val = cell.value;
       if (val && typeof val === 'object') {
-        if (val.hyperlink) extract(val.hyperlink);
-        if (val.text) extract(val.text);
-        if (val.result) extract(val.result);
-        if (val.formula) extract(val.formula);
+        if (val.hyperlink) addUrl(val.hyperlink);
+        if (val.text) addUrl(val.text);
+        if (val.result) addUrl(val.result);
+        if (val.formula) addUrl(val.formula);
       }
-      if (cell.text) extract(cell.text);
-      if (val !== undefined && val !== null && typeof val !== 'object') extract(String(val));
+      if (cell.text) addUrl(cell.text);
+      if (val !== undefined && val !== null && typeof val !== 'object') addUrl(String(val));
       return Array.from(found);
     }
 
@@ -2493,12 +2508,23 @@ processSheetsBtn.addEventListener('click', async () => {
 
     const uniqueUrls = Array.from(uniqueUrlsSet);
     const linkStatusMap = new Map(); // url -> { ok: boolean, status: string, error: string }
+    function getUrlStatus(url) {
+      if (!url) return null;
+      if (linkStatusMap.has(url)) return linkStatusMap.get(url);
+      const enc = url.replace(/ /g, '%20');
+      if (linkStatusMap.has(enc)) return linkStatusMap.get(enc);
+      try {
+        const dec = decodeURI(url);
+        if (linkStatusMap.has(dec)) return linkStatusMap.get(dec);
+      } catch (e) {}
+      return null;
+    }
 
     if (uniqueUrls.length > 0) {
       setProgress(10, `Found ${uniqueUrls.length} link(s). Validating...`);
       await yieldUI();
 
-      const CHUNK_SIZE = 15;
+      const CHUNK_SIZE = 8; // small chunks so heavy catalogs don't stack up
       for (let i = 0; i < uniqueUrls.length; i += CHUNK_SIZE) {
         const chunk = uniqueUrls.slice(i, i + CHUNK_SIZE);
         try {
@@ -2506,23 +2532,27 @@ processSheetsBtn.addEventListener('click', async () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ urls: chunk }),
-            signal: AbortSignal.timeout(35000)
+            signal: AbortSignal.timeout(60000)
           });
           const data = await resp.json();
           if (data && data.results) {
             for (const [u, res] of Object.entries(data.results)) {
               linkStatusMap.set(u, res);
+              linkStatusMap.set(u.replace(/ /g, '%20'), res);
             }
           }
         } catch (fetchErr) {
           // Fallback to checking individually via /api/check-link
           await Promise.all(chunk.map(async u => {
             try {
-              const r = await fetch('/api/check-link?url=' + encodeURIComponent(u), { signal: AbortSignal.timeout(15000) });
+              const r = await fetch('/api/check-link?url=' + encodeURIComponent(u), { signal: AbortSignal.timeout(30000) });
               const d = await r.json();
-              linkStatusMap.set(u, { ok: d.ok, status: d.status, error: d.error || '' });
+              const resObj = { ok: d.ok, status: d.status, error: d.error || '' };
+              linkStatusMap.set(u, resObj);
+              linkStatusMap.set(u.replace(/ /g, '%20'), resObj);
             } catch (indErr) {
-              linkStatusMap.set(u, { ok: false, status: 0, error: indErr.message });
+              const resObj = { ok: false, status: 0, error: indErr.message };
+              linkStatusMap.set(u, resObj);
             }
           }));
         }
@@ -2636,7 +2666,7 @@ processSheetsBtn.addEventListener('click', async () => {
           // If cell has URL(s) -> check broken status
           if (hasUrls) {
             for (const u of cellUrls) {
-              const res = linkStatusMap.get(u);
+              const res = getUrlStatus(u);
               if (res && !res.ok) {
                 issues.push(`Broken link (${res.error || res.status || 'unreachable'}): ${u}`);
               }

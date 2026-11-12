@@ -106,58 +106,94 @@ const USER_AGENT =
 
 // ─── Per-URL link check ──────────────────────────────────────────────────────
 async function checkLink(url, cancelled) {
-  if (cancelled.value) return { url, isBroken: true, statusMessage: 'Cancelled' };
+  if (cancelled && cancelled.value) return { url, isBroken: true, statusMessage: 'Cancelled' };
+
+  // Normalize URL: encode unencoded spaces (%20) for valid HTTP requests
+  let targetUrl = String(url || '').trim();
+  if (targetUrl.includes(' ')) {
+    targetUrl = targetUrl.replace(/ /g, '%20');
+  }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  let timedOut = false;
+  const timeoutId = setTimeout(() => { timedOut = true; controller.abort(); }, 25000);
 
   const cancelCheck = setInterval(() => {
-    if (cancelled.value) controller.abort();
+    if (cancelled && cancelled.value) controller.abort();
   }, 200);
 
   try {
-    let response = await axios({
-      method: 'HEAD',
-      url,
-      timeout: REQUEST_TIMEOUT,
-      signal: controller.signal,
-      validateStatus: null,
-      maxRedirects: 5,
-      headers: { 'User-Agent': USER_AGENT },
-    });
-
-    if (response.status === 405 || response.status === 501) {
-      response = await axios({
-        method: 'GET',
-        url,
-        timeout: REQUEST_TIMEOUT,
+    // 1. Fast HEAD request first (10s)
+    let isWorking = false;
+    let statusMessage = '';
+    try {
+      const headRes = await axios({
+        method: 'HEAD',
+        url: targetUrl,
+        timeout: 10000,
         signal: controller.signal,
-        headers: { 'Range': 'bytes=0-0', 'User-Agent': USER_AGENT },
         validateStatus: null,
         maxRedirects: 5,
+        headers: { 'User-Agent': USER_AGENT },
       });
+      if (headRes.status >= 200 && headRes.status < 400) {
+        clearTimeout(timeoutId);
+        clearInterval(cancelCheck);
+        return {
+          url,
+          isBroken: false,
+          statusMessage: `${headRes.status} ${headRes.statusText || ''}`.trim(),
+        };
+      }
+    } catch (headErr) {
+      // HEAD timed out, blocked, or failed — fall through to Range GET
     }
+
+    if (cancelled && cancelled.value) {
+      clearTimeout(timeoutId);
+      clearInterval(cancelCheck);
+      return { url, isBroken: true, statusMessage: 'Cancelled' };
+    }
+
+    // 2. Stream Range GET (only 10 bytes) — ideal for heavy PDF catalogs & slow servers!
+    const getRes = await axios({
+      method: 'GET',
+      url: targetUrl,
+      timeout: 25000,
+      signal: controller.signal,
+      headers: {
+        'Range': 'bytes=0-10',
+        'User-Agent': USER_AGENT,
+        'Accept': 'application/pdf,*/*'
+      },
+      responseType: 'stream',
+      validateStatus: null,
+      maxRedirects: 5,
+    });
 
     clearTimeout(timeoutId);
     clearInterval(cancelCheck);
 
-    const isWorking = response.status >= 200 && response.status < 400;
+    isWorking = getRes.status >= 200 && getRes.status < 400;
+    statusMessage = `${getRes.status} ${getRes.statusText || ''}`.trim();
+    if (getRes.data && getRes.data.destroy) getRes.data.destroy();
+
     return {
       url,
       isBroken: !isWorking,
-      statusMessage: `${response.status} ${response.statusText || ''}`.trim(),
+      statusMessage: statusMessage,
     };
   } catch (error) {
     clearTimeout(timeoutId);
     clearInterval(cancelCheck);
 
-    if (cancelled.value) return { url, isBroken: true, statusMessage: 'Cancelled' };
+    if (cancelled && cancelled.value) return { url, isBroken: true, statusMessage: 'Cancelled' };
 
     let errorMsg = 'Network error';
     const code = error.code || '';
 
-    if (error.name === 'AbortError' || code === 'ECONNABORTED' || error.name === 'CanceledError') {
-      errorMsg = 'Timeout (>18s)';
+    if (timedOut || error.name === 'AbortError' || code === 'ECONNABORTED' || error.name === 'CanceledError') {
+      errorMsg = 'Timeout (>25s)';
     } else if (code === 'ENOTFOUND') {
       errorMsg = 'DNS not found';
     } else if (code === 'ECONNREFUSED') {
