@@ -1020,6 +1020,7 @@
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ff69b4;vertical-align:middle;margin-right:4px;"></span>in./lbs. in numeric-only column</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#98fb98;border:1px solid #aaa;vertical-align:middle;margin-right:4px;"></span>Minor words (With/For/And...) / Desc starts with number</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#dc143c;vertical-align:middle;margin-right:4px;"></span>Broken Link</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ff7f50;vertical-align:middle;margin-right:4px;"></span>Spelling mistake</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#fffde7;border:1px solid #aaa;vertical-align:middle;margin-right:4px;"></span>Column issue summary (last row)</span>
         </div>
       </div>
@@ -2320,6 +2321,7 @@ processSheetsBtn.addEventListener('click', async () => {
     const PINK   = fill('FFFF69B4'); // in./lbs. unit suffix in numeric-only columns
     const LIME   = fill('FF98FB98'); // proper case issue / description starts with number
     const BROKEN = fill('FFDC143C'); // broken link (crimson)
+    const CORAL  = fill('FFFF7F50'); // spelling mistake (coral)
 
     // ── Columns that must contain ONLY numbers (no "in." / "lbs." text) ───────
     // Minor / function words that should be lowercase in proper case (unless first word)
@@ -2331,6 +2333,133 @@ processSheetsBtn.addEventListener('click', async () => {
       'unit length','unit depth','unit width','unit height','unit weight',
       'shipping length','shipping width','shipping height','shipping weight',
     ]);
+
+    // ── Known Common English & Catalog Typos (Only flags known mistakes, never unknown technical terms/brands) ──
+    const COMMON_TYPOS = {
+      // Dimensions & Measurements
+      'lenght': 'length', 'lenghts': 'lengths',
+      'heigth': 'height', 'heigths': 'heights',
+      'widht': 'width', 'widhts': 'widths',
+      'diamater': 'diameter', 'diamter': 'diameter', 'daimeter': 'diameter',
+      'dimention': 'dimension', 'dimentions': 'dimensions',
+      'thicknes': 'thickness', 'thikness': 'thickness',
+      'weigth': 'weight', 'weigths': 'weights',
+
+      // Materials & Finishes
+      'stianless': 'stainless', 'stanless': 'stainless', 'stainles': 'stainless',
+      'aluminun': 'aluminum', 'alluminum': 'aluminum', 'aliminum': 'aluminum',
+      'galvanzied': 'galvanized', 'galvenized': 'galvanized',
+      'materail': 'material', 'matrial': 'material', 'materails': 'materials',
+
+      // Components & Hardware
+      'vavle': 'valve', 'valv': 'valve', 'vavles': 'valves',
+      'fiting': 'fitting', 'fitings': 'fittings',
+      'copling': 'coupling', 'couplng': 'coupling',
+      'adpter': 'adapter', 'adapater': 'adapter',
+      'braket': 'bracket', 'brakets': 'brackets',
+      'gaskt': 'gasket', 'gaskts': 'gaskets',
+      'bushng': 'bushing',
+      'threded': 'threaded', 'thred': 'thread', 'threds': 'threads',
+      'conenction': 'connection', 'conenctions': 'connections', 'connectin': 'connection', 'conections': 'connections',
+      'circut': 'circuit', 'circuts': 'circuits',
+      'electic': 'electric', 'electical': 'electrical',
+      'applience': 'appliance', 'appliences': 'appliances',
+      'regultor': 'regulator', 'regultors': 'regulators',
+      'indcator': 'indicator', 'indcators': 'indicators',
+      'asembly': 'assembly', 'assambly': 'assembly', 'asemblies': 'assemblies',
+      'accesory': 'accessory', 'accessary': 'accessory', 'accesories': 'accessories',
+
+      // Performance, Operations & Quality
+      'presure': 'pressure', 'pressue': 'pressure',
+      'temprature': 'temperature', 'temperture': 'temperature',
+      'operaton': 'operation', 'opration': 'operation', 'operatons': 'operations',
+      'effecient': 'efficient', 'efficent': 'efficient',
+      'protecton': 'protection', 'protecion': 'protection',
+      'resistanc': 'resistance', 'resistence': 'resistance',
+      'durabel': 'durable',
+      'saftey': 'safety',
+      'calacity': 'capacity',
+      'preformance': 'performance',
+      'flexable': 'flexible',
+      'certifyed': 'certified', 'certfied': 'certified',
+      'condtion': 'condition', 'conditon': 'condition', 'condtions': 'conditions',
+      'automtic': 'automatic',
+      'horisontal': 'horizontal',
+      'verical': 'vertical', 'verticle': 'vertical',
+      'exterier': 'exterior', 'interier': 'interior',
+
+      // Catalog & Business terms
+      'manufaturer': 'manufacturer', 'manufactuer': 'manufacturer', 'manufacturor': 'manufacturer',
+      'desciption': 'description', 'descripiton': 'description', 'descritpion': 'description', 'descripton': 'description',
+      'requried': 'required', 'requierd': 'required',
+      'avialable': 'available', 'availble': 'available', 'availiable': 'available',
+      'installaion': 'installation', 'instalation': 'installation', 'instaltion': 'installation',
+      'shippping': 'shipping', 'shiping': 'shipping',
+      'equiptment': 'equipment', 'equipement': 'equipment',
+      'suplier': 'supplier', 'supliers': 'suppliers',
+      'specifaction': 'specification', 'specifcation': 'specification', 'specifactions': 'specifications',
+      'waranty': 'warranty', 'warenty': 'warranty',
+      'guarentee': 'guarantee', 'garantee': 'guarantee', 'garuntee': 'guarantee',
+      'packge': 'package', 'pakage': 'package', 'packges': 'packages',
+      'quantitiy': 'quantity', 'quanity': 'quantity',
+      'standerd': 'standard', 'standered': 'standard',
+      'colum': 'column', 'colume': 'column', 'colums': 'columns',
+      'referance': 'reference', 'referances': 'references',
+
+      // Daily English Misspellings
+      'seperate': 'separate', 'seperated': 'separated', 'seperately': 'separately',
+      'definately': 'definitely', 'definatly': 'definitely',
+      'untill': 'until',
+      'truely': 'truly',
+      'recieve': 'receive', 'recieved': 'received', 'recieving': 'receiving',
+      'beleive': 'believe', 'beleived': 'believed',
+      'occured': 'occurred', 'occurence': 'occurrence',
+      'goverment': 'government',
+      'enviroment': 'environment', 'enviromental': 'environmental',
+      'wierd': 'weird',
+      'freind': 'friend', 'freinds': 'friends',
+      'tommorow': 'tomorrow', 'tommorrow': 'tomorrow',
+      'writting': 'writing',
+      'begining': 'beginning',
+      'calender': 'calendar',
+      'succesful': 'successful', 'sucessful': 'successful', 'succesfully': 'successfully',
+      'unfortunatly': 'unfortunately',
+      'neccessary': 'necessary', 'necesary': 'necessary',
+      'maintanance': 'maintenance', 'maintainance': 'maintenance',
+      'reccomend': 'recommend', 'recomend': 'recommend', 'reccomended': 'recommended',
+      'accomodate': 'accommodate', 'acommodate': 'accommodate',
+      'adress': 'address', 'addres': 'address',
+      'posession': 'possession',
+      'priviledge': 'privilege', 'privelege': 'privilege',
+      'noticable': 'noticeable',
+      'differant': 'different',
+      'independant': 'independent',
+      'dependant': 'dependent',
+      'consistant': 'consistent',
+      'compatable': 'compatible',
+      'proffesional': 'professional',
+      'experiance': 'experience',
+      'approximatly': 'approximately',
+      'conveniant': 'convenient',
+      'permenant': 'permanent',
+      'relevent': 'relevant',
+      'existance': 'existence',
+      'temperary': 'temporary',
+      'absense': 'absence',
+      'acceptible': 'acceptable',
+      'accidentaly': 'accidentally',
+      'beutiful': 'beautiful',
+      'dissapear': 'disappear',
+      'embarass': 'embarrass',
+      'foriegn': 'foreign',
+      'happend': 'happened',
+      'incidently': 'incidentally',
+      'knowlege': 'knowledge',
+      'mispell': 'misspell',
+      'peice': 'piece',
+      'publically': 'publicly',
+      'unforseen': 'unforeseen'
+    };
 
     // ── Helper: strip HTML tags ───────────────────────────────────────────────
     const stripHtml = s => s.replace(/<[^>]*>/g, '');
@@ -2470,6 +2599,25 @@ processSheetsBtn.addEventListener('click', async () => {
         }
       }
 
+      // 12. Spelling mistakes check (only flags known common English typos — never flags unknown technical terms or brands)
+      const isCodeOrIdCol = /item\s*no|itemno|sku|model|part\s*no|upc|barcode/i.test(hdr);
+      if (!isNumericCol && !isCodeOrIdCol && strVal.trim()) {
+        const textToCheck = isFeatures ? stripHtml(strVal) : strVal;
+        const tokens = textToCheck.split(/\s+/);
+        const typoProblems = [];
+        for (const token of tokens) {
+          const core = token.replace(/^[^a-zA-Z]+/, '').replace(/[^a-zA-Z]+$/, '');
+          if (!core || core.length < 3) continue;
+          const lower = core.toLowerCase();
+          if (COMMON_TYPOS[lower]) {
+            typoProblems.push(`"${core}" (suggest: "${COMMON_TYPOS[lower]}")`);
+          }
+        }
+        if (typoProblems.length) {
+          issues.push('Spelling mistake: ' + typoProblems.join('; '));
+        }
+      }
+
       return issues;
     }
 
@@ -2479,6 +2627,7 @@ processSheetsBtn.addEventListener('click', async () => {
       const lhdr = hdr.toLowerCase();
       const isNumericCol = NUMERIC_ONLY_COLS.has(lhdr);
       if (issues.some(i => i.includes('Broken link'))) return BROKEN;
+      if (issues.some(i => i.includes('Spelling mistake'))) return CORAL;
       if (issues.some(i => i.includes('in.') || i.includes('lbs.') || i.includes('Unit suffix'))) return PINK;
       if (issues.some(i => i.includes('Long Description does not end'))) return ORANGE;
       if (issues.some(i => i.includes('Features not in proper') || i.includes('<b>'))) return RED;
