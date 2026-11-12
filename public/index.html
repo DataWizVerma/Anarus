@@ -749,8 +749,8 @@
   </div>
   <div class="nav-item" data-tool="space" id="nav-space">
     <div class="ni-icon"><i class="fas fa-file-excel"></i></div>
-    <span class="ni-label">Excel Space Checker</span>
-    <span class="ni-badge">Clean</span>
+    <span class="ni-label">Data Quality Check</span>
+    <span class="ni-badge">QC</span>
   </div>
   <div class="nav-item" data-tool="downloader" id="nav-downloader">
     <div class="ni-icon"><i class="fas fa-file-zipper"></i></div>
@@ -968,14 +968,14 @@
   </div>
 
   <!-- ══════════════════════════════════════════════════════════════
-       TOOL 3: EXCEL SPACE CHECKER
+       TOOL 3: DATA QUALITY CHECK
   ══════════════════════════════════════════════════════════════════ -->
   <div id="tool-space" class="tool-section">
     <div class="card">
       <div class="card-hd">
         <div class="card-icon ci-green"><i class="fas fa-file-excel"></i></div>
         <div>
-          <div class="card-title">Excel Space Checker</div>
+          <div class="card-title">Data Quality Check</div>
           <div class="card-sub">Highlight spaces, HTML issues, missing fields, unit suffixes, MFG inconsistency & more in Excel files</div>
         </div>
       </div>
@@ -2220,7 +2220,7 @@ brokenStartBtn.addEventListener('click', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// TOOL 3: EXCEL SPACE CHECKER
+// TOOL 3: DATA QUALITY CHECK
 // ══════════════════════════════════════════════════════════════════════════════
 const excelFileInput  = document.getElementById('excelFile');
 const excelDropZone   = document.getElementById('excelDropZone');
@@ -2516,7 +2516,7 @@ processSheetsBtn.addEventListener('click', async () => {
     const buf = await newWb.xlsx.writeBuffer();
     const a   = document.createElement('a');
     const dt  = new Date().toISOString().slice(0,10);
-    a.download = `${origFileName||'checked'}-SpaceChecker-${dt}.xlsx`;
+    a.download = `${origFileName||'checked'}-DataQualityCheck-${dt}.xlsx`;
     a.href     = URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
     a.click(); URL.revokeObjectURL(a.href);
     excelStatus.textContent = '✅ File downloaded!';
