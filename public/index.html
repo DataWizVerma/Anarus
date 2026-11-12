@@ -976,7 +976,7 @@
         <div class="card-icon ci-green"><i class="fas fa-file-excel"></i></div>
         <div>
           <div class="card-title">Excel Space Checker</div>
-          <div class="card-sub">Highlight trailing spaces, double spaces, &amp; symbol issues in Excel files</div>
+          <div class="card-sub">Highlight spaces, HTML issues, missing fields, unit suffixes, MFG inconsistency & more in Excel files</div>
         </div>
       </div>
 
@@ -1007,12 +1007,15 @@
       <div class="divider"></div>
       <div class="tip" style="margin-bottom:0; flex-wrap:wrap; gap:0.65rem;">
         <i class="fas fa-palette" style="color:var(--accent2)"></i>
-        <div style="display:flex; flex-wrap:wrap; gap:0.65rem; font-size:0.76rem;">
-          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ef4444;vertical-align:middle;margin-right:4px;"></span>Leading/trailing space</span>
+        <div style="display:flex; flex-wrap:wrap; gap:0.55rem; font-size:0.74rem;">
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ef4444;vertical-align:middle;margin-right:4px;"></span>Leading/trailing space / Dot-only / Features HTML issue</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#eab308;vertical-align:middle;margin-right:4px;"></span>Double space</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#3b82f6;vertical-align:middle;margin-right:4px;"></span>Contains &amp; symbol</span>
-          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#a855f7;vertical-align:middle;margin-right:4px;"></span>Empty required field</span>
-          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ef4444;vertical-align:middle;margin-right:4px;"></span>Dot-only value (.)</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#a855f7;vertical-align:middle;margin-right:4px;"></span>Empty required field / Primary Product Type missing</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ff8c00;vertical-align:middle;margin-right:4px;"></span>Long Desc missing trailing period (.)</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#008080;vertical-align:middle;margin-right:4px;"></span>Manufacturer Name inconsistency</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ff69b4;vertical-align:middle;margin-right:4px;"></span>in./lbs. in numeric-only column</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#fffde7;border:1px solid #aaa;vertical-align:middle;margin-right:4px;"></span>Column issue summary (last row)</span>
         </div>
       </div>
     </div>
@@ -2287,41 +2290,229 @@ processSheetsBtn.addEventListener('click', async () => {
   processSheetsBtn.disabled = true;
   try {
     const newWb = new ExcelJS.Workbook();
-    const RED    = {type:'pattern',pattern:'solid',fgColor:{argb:'FFFF0000'}};
-    const YELLOW = {type:'pattern',pattern:'solid',fgColor:{argb:'FFFFFF00'}};
-    const BLUE   = {type:'pattern',pattern:'solid',fgColor:{argb:'FF0000FF'}};
-    const PURPLE = {type:'pattern',pattern:'solid',fgColor:{argb:'FFAA00FF'}};
+
+    // ── Colour palette ────────────────────────────────────────────────────────
+    const fill = argb => ({type:'pattern',pattern:'solid',fgColor:{argb}});
+    const RED    = fill('FFFF0000'); // leading/trailing space, dot-only, HTML in features, in./lbs. in num cols
+    const YELLOW = fill('FFFFFF00'); // double space
+    const BLUE   = fill('FF0000FF'); // & symbol
+    const PURPLE = fill('FFAA00FF'); // empty required field / primary product type missing
+    const ORANGE = fill('FFFF8C00'); // long-desc missing trailing period
+    const TEAL   = fill('FF008080'); // manufacturer name inconsistency
+    const PINK   = fill('FFFF69B4'); // in./lbs. unit suffix in numeric-only columns
+
+    // ── Columns that must contain ONLY numbers (no "in." / "lbs." text) ───────
+    const NUMERIC_ONLY_COLS = new Set([
+      'unit length (in.)','unit depth (in.)','unit width (in.)','unit height (in.)','unit weight (lbs.)',
+      'shipping length (in.)','shipping width (in.)','shipping height (in.)','shipping weight (lbs.)',
+      'unit length','unit depth','unit width','unit height','unit weight',
+      'shipping length','shipping width','shipping height','shipping weight',
+    ]);
+
+    // ── Helper: strip HTML tags ───────────────────────────────────────────────
+    const stripHtml = s => s.replace(/<[^>]*>/g, '');
+
+    // ── Helper: check if Features value is a proper <ul><li>...</li></ul> ────
+    function isFeaturesOk(raw) {
+      const s = raw.trim();
+      if (!s) return true; // empty is fine (empty-required handled separately)
+      // Must start with <ul> and end with </ul>
+      if (!/^<ul[\s>]/i.test(s) || !/<\/ul>\s*$/i.test(s)) return false;
+      // Must have at least one <li>
+      if (!/<li[\s>]/i.test(s)) return false;
+      return true;
+    }
+
+    // ── Helper: get issues string for a cell ─────────────────────────────────
+    // Returns array of issue strings
+    function getIssues(hdr, strVal, isMissing, allMfgValues, primaryProdTypeVal) {
+      const issues = [];
+      const lhdr = hdr.toLowerCase();
+      const isFeatures = /^features$/i.test(hdr);
+      const isLongDesc = /long\s*desc/i.test(hdr);
+      const isNumericCol = NUMERIC_ONLY_COLS.has(lhdr);
+      const isCat = isCatCol(hdr);
+
+      // 1. Dot-only
+      if (strVal === '.') issues.push('Dot-only value (.)');
+
+      // 2. Leading / trailing space (skip Features & category cols)
+      if (!isFeatures && !isCat && strVal !== strVal.trim()) issues.push('Leading/trailing space');
+
+      // 3. Double space (skip Features & category cols)
+      if (!isFeatures && !isCat && strVal.includes('  ')) issues.push('Double space');
+
+      // 4. & symbol (skip Long Description & Features & category)
+      if (!isLongDesc && !isFeatures && !isCat && strVal.includes('&')) issues.push('Contains & symbol');
+
+      // 5. Empty required field
+      if (isMissing) issues.push('Empty required field');
+
+      // 6. Features: must be proper <ul><li> HTML
+      if (isFeatures && strVal.trim()) {
+        if (!isFeaturesOk(strVal)) issues.push('Features not in proper <ul><li> HTML format');
+        // Also check for stray bold/class attributes inside li items
+        if (/<(b|strong|span)[^>]*>/i.test(strVal)) issues.push('Features contains <b>/<strong>/<span> inside list items');
+      }
+
+      // 7. Long Description: must end with period
+      if (isLongDesc && strVal.trim() && !strVal.trim().endsWith('.')) {
+        issues.push('Long Description does not end with period (.)');
+      }
+
+      // 8. Numeric-only columns: no "in." or "lbs." suffix allowed
+      if (isNumericCol && strVal.trim()) {
+        if (/\bin\.?\s*$/i.test(strVal) || /\blbs\.?\s*$/i.test(strVal) ||
+            /\bin\.?\s/i.test(strVal)   || /\blbs\.?\s/i.test(strVal)) {
+          issues.push('Unit suffix "in." or "lbs." found — numeric columns allow numbers only');
+        }
+      }
+
+      // 9. Global: anywhere outside Long Desc & Features — catch " in." / " lbs." as suffix
+      if (!isLongDesc && !isFeatures && !isNumericCol && strVal.trim()) {
+        if (/\s+in\.\s*$/.test(strVal) || /\s+lbs\.\s*$/.test(strVal)) {
+          issues.push('Contains trailing " in." or " lbs." unit suffix (not allowed here)');
+        }
+      }
+
+      return issues;
+    }
+
+    // ── Determine priority fill for a list of issues ──────────────────────────
+    function pickFill(issues, hdr, strVal) {
+      if (!issues.length) return null;
+      const lhdr = hdr.toLowerCase();
+      const isNumericCol = NUMERIC_ONLY_COLS.has(lhdr);
+      if (issues.some(i => i.includes('in.') || i.includes('lbs.') || i.includes('Unit suffix'))) return PINK;
+      if (issues.some(i => i.includes('Long Description does not end'))) return ORANGE;
+      if (issues.some(i => i.includes('Features not in proper') || i.includes('<b>'))) return RED;
+      if (issues.some(i => i.includes('Dot-only') || i.includes('Leading/trailing'))) return RED;
+      if (issues.some(i => i.includes('Double space'))) return YELLOW;
+      if (issues.some(i => i.includes('& symbol'))) return BLUE;
+      if (issues.some(i => i.includes('Empty required'))) return PURPLE;
+      return RED;
+    }
 
     for (const sn of selected) {
       const orig = excelWorkbook.getWorksheet(sn); if (!orig) continue;
       const ns   = newWb.addWorksheet(sn);
-      orig.eachRow({includeEmpty:true}, (row,rn)=>{ const nr=ns.getRow(rn); row.eachCell({includeEmpty:true},(c,cn)=>nr.getCell(cn).value=c.value); nr.commit(); });
-      const headerRow = ns.getRow(1); const colIdx = {};
-      headerRow.eachCell((c,cn)=>{ const v=c.value?String(c.value).trim():''; if(v) colIdx[v]=cn; });
-      const itemNoCol = colIdx['Item No']||colIdx['ItemNo'];
-      const reqCols   = [colIdx['Product Type'],colIdx['Description'],colIdx['Brand'],colIdx['Manufacturer Name']];
-      for (let r=2; r<=ns.rowCount; r++) {
-        const row = ns.getRow(r);
-        row.eachCell({includeEmpty:true},(cell,cn)=>{
-          const hdr    = Object.keys(colIdx).find(k=>colIdx[k]===cn)||'';
-          const strVal = (cell.value!==undefined&&cell.value!==null)?String(cell.value):'';
-          if (strVal==='.') { cell.fill=RED; return; }
-          if (hdr!=='Features'&&!isCatCol(hdr)) {
-            if (strVal!==strVal.trim()) cell.fill=RED;
-            if (strVal.includes('  '))  cell.fill=YELLOW;
+
+      // Copy all rows/cells preserving values
+      orig.eachRow({includeEmpty:true}, (row,rn) => {
+        const nr = ns.getRow(rn);
+        row.eachCell({includeEmpty:true}, (c,cn) => { nr.getCell(cn).value = c.value; });
+        nr.commit();
+      });
+
+      // Build header index
+      const headerRow = ns.getRow(1);
+      const colIdx = {};
+      let maxCol = 0;
+      headerRow.eachCell((c,cn) => {
+        const v = c.value ? String(c.value).trim() : '';
+        if (v) { colIdx[v] = cn; if (cn > maxCol) maxCol = cn; }
+      });
+
+      const itemNoCol = colIdx['Item No'] || colIdx['ItemNo'];
+      // Required columns: Product Type, Description, Brand, Manufacturer Name
+      const reqCols = {
+        'Product Type':      colIdx['Product Type'],
+        'Description':       colIdx['Description'],
+        'Brand':             colIdx['Brand'],
+        'Manufacturer Name': colIdx['Manufacturer Name'],
+      };
+
+      // ── Pass 1: Collect all Manufacturer Name values to detect inconsistency ─
+      const mfgValues = [];
+      if (colIdx['Manufacturer Name']) {
+        for (let r = 2; r <= ns.rowCount; r++) {
+          const row = ns.getRow(r);
+          if (itemNoCol) {
+            const iv = row.getCell(itemNoCol).value;
+            if (!iv || String(iv).trim() === '') continue; // skip empty rows
           }
-          if (hdr!=='Long Description'&&hdr!=='Features'&&!isCatCol(hdr)) {
-            if (strVal.includes('&'))   cell.fill=BLUE;
-          }
-        });
-        if (itemNoCol) {
-          const iv = row.getCell(itemNoCol).value;
-          if (iv&&String(iv).trim()!=='') {
-            reqCols.forEach(col=>{ if(!col) return; const c=row.getCell(col); if(!c.value||String(c.value).trim()==='') c.fill=PURPLE; });
-          }
+          const mv = row.getCell(colIdx['Manufacturer Name']).value;
+          if (mv && String(mv).trim()) mfgValues.push(String(mv).trim());
         }
       }
+      // Find most-frequent Manufacturer Name
+      const mfgFreq = {};
+      mfgValues.forEach(v => mfgFreq[v] = (mfgFreq[v]||0) + 1);
+      const mfgMajority = Object.keys(mfgFreq).sort((a,b)=>mfgFreq[b]-mfgFreq[a])[0] || null;
+      const mfgHasVariants = Object.keys(mfgFreq).length > 1;
+
+      // ── Pass 2: Collect all Primary Product Type values ───────────────────
+      // "Primary Product Type" or "Product Type" for missing check
+      const ptCol = colIdx['Primary Product Type'] || colIdx['Product Type'];
+
+      // ── Pass 3: Per-row checks ────────────────────────────────────────────
+      // We'll also build a per-column issues accumulator for the LAST row comment
+      const colIssueSet = {}; // colName -> Set of issue strings
+
+      for (let r = 2; r <= ns.rowCount; r++) {
+        const row = ns.getRow(r);
+
+        // Skip truly empty rows (no ItemNo and no data)
+        let rowHasData = false;
+        if (itemNoCol) {
+          const iv = row.getCell(itemNoCol).value;
+          if (iv && String(iv).trim() !== '') rowHasData = true;
+        }
+        if (!rowHasData) {
+          // Check if any cell in row has content
+          row.eachCell({includeEmpty:false}, () => { rowHasData = true; });
+        }
+        if (!rowHasData) continue;
+
+        row.eachCell({includeEmpty:true}, (cell, cn) => {
+          const hdr    = Object.keys(colIdx).find(k => colIdx[k] === cn) || '';
+          const strVal = (cell.value !== undefined && cell.value !== null) ? String(cell.value) : '';
+
+          // Determine if this is an empty required column
+          const isReqCol = Object.keys(reqCols).includes(hdr);
+          const hasItemNo = itemNoCol && row.getCell(itemNoCol).value && String(row.getCell(itemNoCol).value).trim() !== '';
+          const isMissing = isReqCol && hasItemNo && (!strVal || strVal.trim() === '');
+
+          // Also check Primary Product Type specifically
+          const isPrimaryPT = /primary\s*product\s*type/i.test(hdr);
+          const isPTMissing = isPrimaryPT && hasItemNo && (!strVal || strVal.trim() === '');
+
+          const issues = getIssues(hdr, strVal, isMissing || isPTMissing);
+
+          // Manufacturer Name inconsistency
+          const isMfgCol = /manufacturer\s*name/i.test(hdr);
+          if (isMfgCol && mfgHasVariants && strVal.trim() && strVal.trim() !== mfgMajority) {
+            issues.push(`Manufacturer Name is "${strVal.trim()}" but majority is "${mfgMajority}"`);
+          }
+
+          // Apply fill
+          if (issues.length) {
+            const f = isMfgCol && mfgHasVariants && issues.some(i=>i.includes('Manufacturer Name is')) ? TEAL : pickFill(issues, hdr, strVal);
+            if (f) cell.fill = f;
+            // Accumulate for column summary
+            if (hdr) {
+              if (!colIssueSet[hdr]) colIssueSet[hdr] = new Set();
+              issues.forEach(i => colIssueSet[hdr].add(i));
+            }
+          }
+        });
+      }
+
+      // ── Pass 4: Add issue summary comment in the LAST DATA ROW+2 of each flagged column ──
+      const summaryRow = ns.rowCount + 2;
+      for (const [colName, issueSet] of Object.entries(colIssueSet)) {
+        const cn = colIdx[colName];
+        if (!cn) continue;
+        const cell = ns.getRow(summaryRow).getCell(cn);
+        const issueList = [...issueSet].map(i => `• ${i}`).join('\n');
+        cell.value = `⚠ Issues in "${colName}":\n${issueList}`;
+        cell.fill = fill('FFFFF3CD'); // light yellow background for summary
+        cell.font = { bold: true, size: 9, color: { argb: 'FF7D4E00' } };
+        cell.alignment = { wrapText: true, vertical: 'top' };
+        ns.getRow(summaryRow).height = 60;
+      }
     }
+
     const buf = await newWb.xlsx.writeBuffer();
     const a   = document.createElement('a');
     const dt  = new Date().toISOString().slice(0,10);
