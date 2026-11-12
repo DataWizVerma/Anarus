@@ -2292,6 +2292,18 @@ processSheetsBtn.addEventListener('click', async () => {
   if (!selected.length) { showToast('Select at least one sheet', 'error'); return; }
 
   excelLoading.style.display = 'block'; excelStatus.textContent = '';
+  // Progress bar helpers (defined before try so they're available for initial setProgress call)
+  const progBar   = document.getElementById('excelProgressBar');
+  const progText  = document.getElementById('excelProgressText');
+  const progLabel = document.getElementById('excelProgressLabel');
+  function setProgress(pct, label) {
+    const p = Math.min(100, Math.max(0, Math.round(pct)));
+    progBar.style.width = p + '%';
+    progText.textContent = p + '%';
+    if (label) progLabel.textContent = label;
+  }
+  const yieldUI = () => new Promise(r => setTimeout(r, 0));
+
   setProgress(0, 'Initializing...');
   processSheetsBtn.disabled = true;
   try {
@@ -2308,19 +2320,6 @@ processSheetsBtn.addEventListener('click', async () => {
     const PINK   = fill('FFFF69B4'); // in./lbs. unit suffix in numeric-only columns
     const LIME   = fill('FF98FB98'); // proper case issue / description starts with number
     const BROKEN = fill('FFDC143C'); // broken link (crimson)
-
-    // Progress bar helpers
-    const progBar   = document.getElementById('excelProgressBar');
-    const progText  = document.getElementById('excelProgressText');
-    const progLabel = document.getElementById('excelProgressLabel');
-    function setProgress(pct, label) {
-      const p = Math.min(100, Math.max(0, Math.round(pct)));
-      progBar.style.width = p + '%';
-      progText.textContent = p + '%';
-      if (label) progLabel.textContent = label;
-    }
-    // Yield to UI thread so progress bar actually repaints
-    const yieldUI = () => new Promise(r => setTimeout(r, 0));
 
     // ── Columns that must contain ONLY numbers (no "in." / "lbs." text) ───────
     // Minor / function words that should be lowercase in proper case (unless first word)
