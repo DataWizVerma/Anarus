@@ -1011,7 +1011,7 @@
       <div class="tip" style="margin-bottom:0; flex-wrap:wrap; gap:0.65rem;">
         <i class="fas fa-palette" style="color:var(--accent2)"></i>
         <div style="display:flex; flex-wrap:wrap; gap:0.55rem; font-size:0.74rem;">
-          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ef4444;vertical-align:middle;margin-right:4px;"></span>Leading/trailing space / Dot-only / Features HTML issue</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ef4444;vertical-align:middle;margin-right:4px;"></span>Leading/trailing space / Dot-only / Features HTML / UPC &lt; 12 digits</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#eab308;vertical-align:middle;margin-right:4px;"></span>Double space</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#3b82f6;vertical-align:middle;margin-right:4px;"></span>Contains &amp; symbol</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#a855f7;vertical-align:middle;margin-right:4px;"></span>Empty required field / Primary Product Type missing</span>
@@ -2625,6 +2625,15 @@ processSheetsBtn.addEventListener('click', async () => {
         }
       }
 
+      // 13. UPC Digit Check (UPC must be 12 digits — flag if less than 12 digits)
+      const isUpcCol = /\bupc\b|barcode|gtin/i.test(hdr);
+      if (isUpcCol && strVal.trim()) {
+        const digits = strVal.replace(/\D/g, '');
+        if (digits.length < 12) {
+          issues.push(`UPC must be 12 digits (found ${digits.length} digit${digits.length === 1 ? '' : 's'}: "${strVal.trim()}")`);
+        }
+      }
+
       return issues;
     }
 
@@ -2635,6 +2644,7 @@ processSheetsBtn.addEventListener('click', async () => {
       const isNumericCol = NUMERIC_ONLY_COLS.has(lhdr);
       if (issues.some(i => i.includes('Broken link'))) return BROKEN;
       if (issues.some(i => i.includes('Spelling mistake'))) return CORAL;
+      if (issues.some(i => i.includes('UPC must be 12 digits'))) return RED;
       if (issues.some(i => i.includes('in.') || i.includes('lbs.') || i.includes('Unit suffix'))) return PINK;
       if (issues.some(i => i.includes('Long Description does not end'))) return ORANGE;
       if (issues.some(i => i.includes('Features not in proper') || i.includes('<b>'))) return RED;
