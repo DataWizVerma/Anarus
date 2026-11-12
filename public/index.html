@@ -2337,6 +2337,9 @@ processSheetsBtn.addEventListener('click', async () => {
     // ── Known Common English & Catalog Typos (Only flags known mistakes, never unknown technical terms/brands) ──
     const COMMON_TYPOS = {
       // Dimensions & Measurements
+      'drgree': 'degree', 'drgrees': 'degrees', 'degre': 'degree', 'degres': 'degrees', 'dregree': 'degree', 'dregrees': 'degrees',
+      'guage': 'gauge', 'guages': 'gauges',
+      'elbo': 'elbow', 'elboe': 'elbow', 'elbw': 'elbow',
       'lenght': 'length', 'lenghts': 'lengths',
       'heigth': 'height', 'heigths': 'heights',
       'widht': 'width', 'widhts': 'widths',
@@ -2348,6 +2351,7 @@ processSheetsBtn.addEventListener('click', async () => {
       // Materials & Finishes
       'stianless': 'stainless', 'stanless': 'stainless', 'stainles': 'stainless',
       'aluminun': 'aluminum', 'alluminum': 'aluminum', 'aliminum': 'aluminum',
+      'alluminized': 'aluminized', 'aluminised': 'aluminized',
       'galvanzied': 'galvanized', 'galvenized': 'galvanized',
       'materail': 'material', 'matrial': 'material', 'materails': 'materials',
 
@@ -2356,6 +2360,9 @@ processSheetsBtn.addEventListener('click', async () => {
       'fiting': 'fitting', 'fitings': 'fittings',
       'copling': 'coupling', 'couplng': 'coupling',
       'adpter': 'adapter', 'adapater': 'adapter',
+      'reduser': 'reducer', 'redusers': 'reducers',
+      'increeser': 'increaser', 'increesers': 'increasers',
+      'flang': 'flange', 'flng': 'flange',
       'braket': 'bracket', 'brakets': 'brackets',
       'gaskt': 'gasket', 'gaskts': 'gaskets',
       'bushng': 'bushing',
@@ -2768,7 +2775,7 @@ processSheetsBtn.addEventListener('click', async () => {
       const mfgHasVariants = Object.keys(mfgFreq).length > 1;
 
       // ── Pass 2: Per-row checks ────────────────────────────────────────────
-      const colIssueSet = {}; // colName -> Set of issue strings
+      const colIssueMap = {}; // colName -> Map(issueText -> Set of row numbers)
 
       for (let r = 2; r <= ns.rowCount; r++) {
         processedRows++;
@@ -2833,15 +2840,22 @@ processSheetsBtn.addEventListener('click', async () => {
             issues.push(`Manufacturer Name is "${strVal.trim()}" but majority is "${mfgMajority}"`);
           }
 
-          // Apply cell fill
+          // Apply cell fill, cell note & track issues per row
           if (issues.length) {
             const f = isMfgCol && mfgHasVariants && issues.some(i => i.includes('Manufacturer Name is'))
               ? TEAL
               : pickFill(issues, hdr, strVal);
             if (f) cell.fill = f;
+
+            // Note/Comment right inside this cell so hovering over this line shows its specific errors
+            cell.note = '⚠ Issues in this cell:\n• ' + issues.join('\n• ');
+
             if (hdr) {
-              if (!colIssueSet[hdr]) colIssueSet[hdr] = new Set();
-              issues.forEach(i => colIssueSet[hdr].add(i));
+              if (!colIssueMap[hdr]) colIssueMap[hdr] = new Map();
+              issues.forEach(i => {
+                if (!colIssueMap[hdr].has(i)) colIssueMap[hdr].set(i, new Set());
+                colIssueMap[hdr].get(i).add(r);
+              });
             }
           }
         });
@@ -2849,16 +2863,26 @@ processSheetsBtn.addEventListener('click', async () => {
 
       // ── Pass 3: Add issue summary comment in LAST DATA ROW+2 ─────────────
       const summaryRow = ns.rowCount + 2;
-      for (const [colName, issueSet] of Object.entries(colIssueSet)) {
+      for (const [colName, issueMap] of Object.entries(colIssueMap)) {
         const cn = colIdx[colName];
         if (!cn) continue;
         const cell = ns.getRow(summaryRow).getCell(cn);
-        const issueList = [...issueSet].map(i => `• ${i}`).join('\n');
-        cell.value = `⚠ Issues in "${colName}":\n${issueList}`;
+        const issueList = [];
+        for (const [issueText, rowSet] of issueMap.entries()) {
+          const rowArr = Array.from(rowSet);
+          if (rowArr.length <= 2) {
+            // If only in 1 or 2 rows, specify the exact row number(s)!
+            issueList.push(`• ${issueText} (Row ${rowArr.join(', ')})`);
+          } else {
+            // If in many rows, summarize count
+            issueList.push(`• ${issueText} (${rowArr.length} rows)`);
+          }
+        }
+        cell.value = `⚠ Issues in "${colName}":\n${issueList.join('\n')}`;
         cell.fill = fill('FFFFF3CD'); // light yellow background for summary
         cell.font = { bold: true, size: 9, color: { argb: 'FF7D4E00' } };
         cell.alignment = { wrapText: true, vertical: 'top' };
-        ns.getRow(summaryRow).height = 60;
+        ns.getRow(summaryRow).height = Math.max(60, 20 + issueList.length * 15);
       }
     }
 
