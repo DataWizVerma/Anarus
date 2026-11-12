@@ -2346,6 +2346,31 @@ processSheetsBtn.addEventListener('click', async () => {
       return true;
     }
 
+    // ── Helper: extract all valid URLs from any cell (hyperlink obj, formula, string) ──
+    function extractUrlsFromCell(cell) {
+      if (!cell || cell.value === undefined || cell.value === null) return [];
+      const found = new Set();
+      const extract = str => {
+        if (!str || typeof str !== 'string') return;
+        const m = str.match(/https?:\/\/[^\s"'\<\>\)]+/gi);
+        if (m) m.forEach(u => {
+          const clean = u.replace(/[.,;]+$/, '').trim();
+          if (clean) found.add(clean);
+        });
+      };
+      if (cell.hyperlink) extract(cell.hyperlink);
+      const val = cell.value;
+      if (val && typeof val === 'object') {
+        if (val.hyperlink) extract(val.hyperlink);
+        if (val.text) extract(val.text);
+        if (val.result) extract(val.result);
+        if (val.formula) extract(val.formula);
+      }
+      if (cell.text) extract(cell.text);
+      if (val !== undefined && val !== null && typeof val !== 'object') extract(String(val));
+      return Array.from(found);
+    }
+
     // ── Helper: get issues string for a cell ─────────────────────────────────
     // Returns array of issue strings
     function getIssues(hdr, strVal, isMissing, allMfgValues, primaryProdTypeVal) {
@@ -2438,6 +2463,7 @@ processSheetsBtn.addEventListener('click', async () => {
       if (!issues.length) return null;
       const lhdr = hdr.toLowerCase();
       const isNumericCol = NUMERIC_ONLY_COLS.has(lhdr);
+      if (issues.some(i => i.includes('Broken link'))) return BROKEN;
       if (issues.some(i => i.includes('in.') || i.includes('lbs.') || i.includes('Unit suffix'))) return PINK;
       if (issues.some(i => i.includes('Long Description does not end'))) return ORANGE;
       if (issues.some(i => i.includes('Features not in proper') || i.includes('<b>'))) return RED;
@@ -2449,18 +2475,72 @@ processSheetsBtn.addEventListener('click', async () => {
       return RED;
     }
 
-    // ── Count total rows across all selected sheets for progress ─────────────
+    // ── Phase 1: Pre-scan all cells across selected sheets to collect all URLs ──
+    setProgress(5, 'Scanning sheets for links...');
+    await yieldUI();
+
+    const uniqueUrlsSet = new Set();
+    for (const sn of selected) {
+      const orig = excelWorkbook.getWorksheet(sn);
+      if (!orig) continue;
+      orig.eachRow({ includeEmpty: false }, row => {
+        row.eachCell({ includeEmpty: false }, cell => {
+          const urls = extractUrlsFromCell(cell);
+          urls.forEach(u => uniqueUrlsSet.add(u));
+        });
+      });
+    }
+
+    const uniqueUrls = Array.from(uniqueUrlsSet);
+    const linkStatusMap = new Map(); // url -> { ok: boolean, status: string, error: string }
+
+    if (uniqueUrls.length > 0) {
+      setProgress(10, `Found ${uniqueUrls.length} link(s). Validating...`);
+      await yieldUI();
+
+      const CHUNK_SIZE = 15;
+      for (let i = 0; i < uniqueUrls.length; i += CHUNK_SIZE) {
+        const chunk = uniqueUrls.slice(i, i + CHUNK_SIZE);
+        try {
+          const resp = await fetch('/api/check-links-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ urls: chunk }),
+            signal: AbortSignal.timeout(35000)
+          });
+          const data = await resp.json();
+          if (data && data.results) {
+            for (const [u, res] of Object.entries(data.results)) {
+              linkStatusMap.set(u, res);
+            }
+          }
+        } catch (fetchErr) {
+          // Fallback to checking individually via /api/check-link
+          await Promise.all(chunk.map(async u => {
+            try {
+              const r = await fetch('/api/check-link?url=' + encodeURIComponent(u), { signal: AbortSignal.timeout(15000) });
+              const d = await r.json();
+              linkStatusMap.set(u, { ok: d.ok, status: d.status, error: d.error || '' });
+            } catch (indErr) {
+              linkStatusMap.set(u, { ok: false, status: 0, error: indErr.message });
+            }
+          }));
+        }
+
+        const checkedCount = Math.min(i + CHUNK_SIZE, uniqueUrls.length);
+        const checkPct = 10 + Math.round((checkedCount / uniqueUrls.length) * 35); // 10% -> 45%
+        setProgress(checkPct, `Checked ${checkedCount} of ${uniqueUrls.length} links...`);
+        await yieldUI();
+      }
+    }
+
+    // ── Phase 2: Row-by-Row Checks and Formatting ───────────────────────────
     let totalRows = 0;
-    let hasAnyUrls = false;
     for (const sn of selected) {
       const ws = excelWorkbook.getWorksheet(sn);
       if (ws) totalRows += Math.max(0, ws.rowCount - 1);
     }
     let processedRows = 0;
-
-    // ── Collect all URL cells for broken-link checking ─────────────────────
-    const urlCells = []; // { sheetName, row, col, url, hdr }
-    const sheetMeta = {}; // sheetName -> { colIssueSet, colIdx, summaryRow }
 
     for (let si = 0; si < selected.length; si++) {
       const sn = selected[si];
@@ -2468,23 +2548,21 @@ processSheetsBtn.addEventListener('click', async () => {
       const ns   = newWb.addWorksheet(sn);
 
       // Copy all rows/cells preserving values
-      orig.eachRow({includeEmpty:true}, (row,rn) => {
+      orig.eachRow({ includeEmpty: true }, (row, rn) => {
         const nr = ns.getRow(rn);
-        row.eachCell({includeEmpty:true}, (c,cn) => { nr.getCell(cn).value = c.value; });
-        nr.commit();
+        row.eachCell({ includeEmpty: true }, (c, cn) => { nr.getCell(cn).value = c.value; });
       });
 
       // Build header index
       const headerRow = ns.getRow(1);
       const colIdx = {};
       let maxCol = 0;
-      headerRow.eachCell((c,cn) => {
+      headerRow.eachCell((c, cn) => {
         const v = c.value ? String(c.value).trim() : '';
         if (v) { colIdx[v] = cn; if (cn > maxCol) maxCol = cn; }
       });
 
       const itemNoCol = colIdx['Item No'] || colIdx['ItemNo'];
-      // Required columns: Product Type, Description, Brand, Manufacturer Name
       const reqCols = {
         'Product Type':      colIdx['Product Type'],
         'Description':       colIdx['Description'],
@@ -2499,67 +2577,75 @@ processSheetsBtn.addEventListener('click', async () => {
           const row = ns.getRow(r);
           if (itemNoCol) {
             const iv = row.getCell(itemNoCol).value;
-            if (!iv || String(iv).trim() === '') continue; // skip empty rows
+            if (!iv || String(iv).trim() === '') continue;
           }
           const mv = row.getCell(colIdx['Manufacturer Name']).value;
           if (mv && String(mv).trim()) mfgValues.push(String(mv).trim());
         }
       }
-      // Find most-frequent Manufacturer Name
       const mfgFreq = {};
-      mfgValues.forEach(v => mfgFreq[v] = (mfgFreq[v]||0) + 1);
-      const mfgMajority = Object.keys(mfgFreq).sort((a,b)=>mfgFreq[b]-mfgFreq[a])[0] || null;
+      mfgValues.forEach(v => mfgFreq[v] = (mfgFreq[v] || 0) + 1);
+      const mfgMajority = Object.keys(mfgFreq).sort((a, b) => mfgFreq[b] - mfgFreq[a])[0] || null;
       const mfgHasVariants = Object.keys(mfgFreq).length > 1;
 
-      // ── Pass 2: Collect all Primary Product Type values ───────────────────
-      // "Primary Product Type" or "Product Type" for missing check
-      const ptCol = colIdx['Primary Product Type'] || colIdx['Product Type'];
-
-      // ── Pass 3: Per-row checks ────────────────────────────────────────────
-      // We'll also build a per-column issues accumulator for the LAST row comment
+      // ── Pass 2: Per-row checks ────────────────────────────────────────────
       const colIssueSet = {}; // colName -> Set of issue strings
 
       for (let r = 2; r <= ns.rowCount; r++) {
-        // ── Progress update every 50 rows ──
         processedRows++;
         if (processedRows % 50 === 0 || r === ns.rowCount) {
-          const maxDataPct = urlCells.length > 0 ? 90 : 98; // reserve 10% for link checks if URLs exist
-          const pct = totalRows > 0 ? (processedRows / totalRows) * maxDataPct : 0;
-          setProgress(pct, `Checking sheet "${sn}" — row ${r - 1} of ${ns.rowCount - 1}...`);
+          const rowPct = totalRows > 0 ? 45 + Math.round((processedRows / totalRows) * 50) : 95; // 45% -> 95%
+          setProgress(rowPct, `Checking sheet "${sn}" — row ${r - 1} of ${ns.rowCount - 1}...`);
           await yieldUI();
         }
         const row = ns.getRow(r);
 
-        // Skip truly empty rows (no ItemNo and no data)
+        // Skip truly empty rows
         let rowHasData = false;
         if (itemNoCol) {
           const iv = row.getCell(itemNoCol).value;
           if (iv && String(iv).trim() !== '') rowHasData = true;
         }
         if (!rowHasData) {
-          // Check if any cell in row has content
-          row.eachCell({includeEmpty:false}, () => { rowHasData = true; });
+          row.eachCell({ includeEmpty: false }, () => { rowHasData = true; });
         }
         if (!rowHasData) continue;
 
-        row.eachCell({includeEmpty:true}, (cell, cn) => {
-          const hdr    = Object.keys(colIdx).find(k => colIdx[k] === cn) || '';
-          const strVal = (cell.value !== undefined && cell.value !== null) ? String(cell.value) : '';
+        row.eachCell({ includeEmpty: true }, (cell, cn) => {
+          const hdr = Object.keys(colIdx).find(k => colIdx[k] === cn) || '';
+          const cellUrls = extractUrlsFromCell(cell);
+          const hasUrls = cellUrls.length > 0;
 
-          // Determine if this is an empty required column
+          let strVal = '';
+          if (cell.value !== undefined && cell.value !== null) {
+            if (typeof cell.value === 'object') {
+              strVal = cell.text || cell.value.text || cell.value.result || '';
+            } else {
+              strVal = String(cell.value);
+            }
+          }
+
           const isReqCol = Object.keys(reqCols).includes(hdr);
           const hasItemNo = itemNoCol && row.getCell(itemNoCol).value && String(row.getCell(itemNoCol).value).trim() !== '';
           const isMissing = isReqCol && hasItemNo && (!strVal || strVal.trim() === '');
-
-          // Also check Primary Product Type specifically
           const isPrimaryPT = /primary\s*product\s*type/i.test(hdr);
           const isPTMissing = isPrimaryPT && hasItemNo && (!strVal || strVal.trim() === '');
 
-          const issues = getIssues(hdr, strVal, isMissing || isPTMissing);
+          const issues = [];
 
-          // Collect URLs for broken-link checking
-          if (/^https?:\/\//i.test(strVal.trim())) {
-            urlCells.push({ sheetName: sn, row: r, col: cn, url: strVal.trim(), hdr });
+          // If cell has URL(s) -> check broken status
+          if (hasUrls) {
+            for (const u of cellUrls) {
+              const res = linkStatusMap.get(u);
+              if (res && !res.ok) {
+                issues.push(`Broken link (${res.error || res.status || 'unreachable'}): ${u}`);
+              }
+            }
+            if (isMissing) issues.push('Empty required field');
+          } else {
+            // Non-URL cell -> regular data quality checks
+            const textIssues = getIssues(hdr, strVal, isMissing || isPTMissing);
+            textIssues.forEach(i => issues.push(i));
           }
 
           // Manufacturer Name inconsistency
@@ -2568,11 +2654,12 @@ processSheetsBtn.addEventListener('click', async () => {
             issues.push(`Manufacturer Name is "${strVal.trim()}" but majority is "${mfgMajority}"`);
           }
 
-          // Apply fill
+          // Apply cell fill
           if (issues.length) {
-            const f = isMfgCol && mfgHasVariants && issues.some(i=>i.includes('Manufacturer Name is')) ? TEAL : pickFill(issues, hdr, strVal);
+            const f = isMfgCol && mfgHasVariants && issues.some(i => i.includes('Manufacturer Name is'))
+              ? TEAL
+              : pickFill(issues, hdr, strVal);
             if (f) cell.fill = f;
-            // Accumulate for column summary
             if (hdr) {
               if (!colIssueSet[hdr]) colIssueSet[hdr] = new Set();
               issues.forEach(i => colIssueSet[hdr].add(i));
@@ -2581,7 +2668,7 @@ processSheetsBtn.addEventListener('click', async () => {
         });
       }
 
-      // ── Pass 4: Add issue summary comment in the LAST DATA ROW+2 of each flagged column ──
+      // ── Pass 3: Add issue summary comment in LAST DATA ROW+2 ─────────────
       const summaryRow = ns.rowCount + 2;
       for (const [colName, issueSet] of Object.entries(colIssueSet)) {
         const cn = colIdx[colName];
@@ -2593,76 +2680,6 @@ processSheetsBtn.addEventListener('click', async () => {
         cell.font = { bold: true, size: 9, color: { argb: 'FF7D4E00' } };
         cell.alignment = { wrapText: true, vertical: 'top' };
         ns.getRow(summaryRow).height = 60;
-      }
-      // Store sheet metadata for broken-link summary pass
-      sheetMeta[sn] = { colIssueSet, colIdx, summaryRow };
-    }
-
-    // ── Pass 5: Broken Link Checking ──────────────────────────────────────────
-    if (urlCells.length > 0) {
-      setProgress(90, `Checking ${urlCells.length} link(s) for broken URLs...`);
-      await yieldUI();
-
-      // Deduplicate URLs
-      const uniqueUrls = [...new Set(urlCells.map(u => u.url))];
-
-      // Check links in batches via server proxy (HEAD request)
-      const BATCH = 10;
-      const linkStatus = {}; // url -> { ok: bool, status: number, error: string }
-      for (let b = 0; b < uniqueUrls.length; b += BATCH) {
-        const batch = uniqueUrls.slice(b, b + BATCH);
-        const results = await Promise.allSettled(
-          batch.map(async url => {
-            try {
-              const resp = await fetch('/api/check-link?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout(15000) });
-              const data = await resp.json();
-              return { url, ok: data.ok, status: data.status, error: data.error || '' };
-            } catch (e) {
-              return { url, ok: false, status: 0, error: e.message };
-            }
-          })
-        );
-        results.forEach(r => {
-          if (r.status === 'fulfilled') linkStatus[r.value.url] = r.value;
-          else linkStatus[batch[0]] = { url: batch[0], ok: false, status: 0, error: 'timeout' };
-        });
-        const linkPct = 90 + ((b + batch.length) / uniqueUrls.length) * 10;
-        setProgress(linkPct, `Checked ${Math.min(b + BATCH, uniqueUrls.length)} of ${uniqueUrls.length} links...`);
-        await yieldUI();
-      }
-
-      // Mark broken links in the workbook and add to column summaries
-      for (const uc of urlCells) {
-        const ls = linkStatus[uc.url];
-        if (ls && !ls.ok) {
-          const ws = newWb.getWorksheet(uc.sheetName);
-          if (!ws) continue;
-          const cell = ws.getRow(uc.row).getCell(uc.col);
-          cell.fill = BROKEN;
-          // Add to column summary
-          const meta = sheetMeta[uc.sheetName];
-          if (meta && uc.hdr) {
-            if (!meta.colIssueSet[uc.hdr]) meta.colIssueSet[uc.hdr] = new Set();
-            meta.colIssueSet[uc.hdr].add(`Broken link detected (${ls.error || 'unreachable'})`);
-          }
-        }
-      }
-
-      // Re-write summary rows for sheets that got broken link issues
-      for (const [sn, meta] of Object.entries(sheetMeta)) {
-        const ws = newWb.getWorksheet(sn);
-        if (!ws) continue;
-        for (const [colName, issueSet] of Object.entries(meta.colIssueSet)) {
-          if (!issueSet.has || ![...issueSet].some(i => i.includes('Broken link'))) continue;
-          const cn = meta.colIdx[colName];
-          if (!cn) continue;
-          const cell = ws.getRow(meta.summaryRow).getCell(cn);
-          const issueList = [...issueSet].map(i => `• ${i}`).join('\n');
-          cell.value = `⚠ Issues in "${colName}":\n${issueList}`;
-          cell.fill = fill('FFFFF3CD');
-          cell.font = { bold: true, size: 9, color: { argb: 'FF7D4E00' } };
-          cell.alignment = { wrapText: true, vertical: 'top' };
-        }
       }
     }
 

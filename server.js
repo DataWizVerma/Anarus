@@ -40,48 +40,47 @@ app.get('/api/proxy', async (req, res) => {
   }
 });
 
-// ─── Broken Link Checker (HEAD request via server to bypass CORS) ────────────
+// ─── Broken Link Checker Endpoints (using proven checkLink logic) ────────────
 app.get('/api/check-link', async (req, res) => {
   const { url } = req.query;
   if (!url || !/^https?:\/\//i.test(url)) {
     return res.json({ ok: false, status: 0, error: 'Invalid URL' });
   }
   try {
-    // Try HEAD first (faster), fall back to GET if HEAD fails
-    let response;
-    try {
-      response = await axios({
-        method: 'HEAD',
-        url,
-        timeout: 12000,
-        maxRedirects: 5,
-        validateStatus: () => true, // don't throw on any status
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
-    } catch (headErr) {
-      // HEAD might be blocked, try GET
-      response = await axios({
-        method: 'GET',
-        url,
-        timeout: 12000,
-        maxRedirects: 5,
-        validateStatus: () => true,
-        responseType: 'stream',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
-      // Destroy the stream immediately — we only need the status
-      if (response.data && response.data.destroy) response.data.destroy();
-    }
-    const ok = response.status >= 200 && response.status < 400;
-    res.json({ ok, status: response.status, error: ok ? '' : `HTTP ${response.status}` });
+    const result = await checkLink(url.trim(), { value: false });
+    res.json({
+      ok: !result.isBroken,
+      status: result.statusMessage,
+      error: result.isBroken ? result.statusMessage : ''
+    });
   } catch (e) {
-    const status = e.response?.status || 0;
-    res.json({ ok: false, status, error: e.code || e.message });
+    res.json({ ok: false, status: 0, error: e.message || 'Check failed' });
   }
+});
+
+app.post('/api/check-links-batch', async (req, res) => {
+  const { urls } = req.body;
+  if (!urls || !Array.isArray(urls)) {
+    return res.json({ results: {} });
+  }
+  const results = {};
+  const CONCURRENCY = 6;
+  for (let i = 0; i < urls.length; i += CONCURRENCY) {
+    const chunk = urls.slice(i, i + CONCURRENCY);
+    await Promise.all(chunk.map(async (u) => {
+      try {
+        const r = await checkLink(u.trim(), { value: false });
+        results[u] = {
+          ok: !r.isBroken,
+          status: r.statusMessage,
+          error: r.isBroken ? r.statusMessage : ''
+        };
+      } catch (err) {
+        results[u] = { ok: false, status: 0, error: err.message || 'Check failed' };
+      }
+    }));
+  }
+  res.json({ results });
 });
 
 // ─── UPC Single Item Lookup Endpoint ─────────────────────────────────────────
