@@ -1015,6 +1015,7 @@
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ff8c00;vertical-align:middle;margin-right:4px;"></span>Long Desc missing trailing period (.)</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#008080;vertical-align:middle;margin-right:4px;"></span>Manufacturer Name inconsistency</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ff69b4;vertical-align:middle;margin-right:4px;"></span>in./lbs. in numeric-only column</span>
+          <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#98fb98;border:1px solid #aaa;vertical-align:middle;margin-right:4px;"></span>Proper Case / Desc starts with number</span>
           <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#fffde7;border:1px solid #aaa;vertical-align:middle;margin-right:4px;"></span>Column issue summary (last row)</span>
         </div>
       </div>
@@ -2300,8 +2301,12 @@ processSheetsBtn.addEventListener('click', async () => {
     const ORANGE = fill('FFFF8C00'); // long-desc missing trailing period
     const TEAL   = fill('FF008080'); // manufacturer name inconsistency
     const PINK   = fill('FFFF69B4'); // in./lbs. unit suffix in numeric-only columns
+    const LIME   = fill('FF98FB98'); // proper case issue / description starts with number
 
     // ── Columns that must contain ONLY numbers (no "in." / "lbs." text) ───────
+    // Minor / function words that should be lowercase in proper case (unless first word)
+    const MINOR_WORDS = new Set(['with','for','and','is','as','if','in','the','than']);
+
     const NUMERIC_ONLY_COLS = new Set([
       'unit length (in.)','unit depth (in.)','unit width (in.)','unit height (in.)','unit weight (lbs.)',
       'shipping length (in.)','shipping width (in.)','shipping height (in.)','shipping weight (lbs.)',
@@ -2375,6 +2380,76 @@ processSheetsBtn.addEventListener('click', async () => {
         }
       }
 
+      // 10. Description must NOT start with a numeric value
+      const isDescCol = /^description$/i.test(hdr);
+      if (isDescCol && strVal.trim() && /^\d/.test(strVal.trim())) {
+        issues.push('Description starts with a numeric value');
+      }
+
+      // 11. Proper Case check (skip Features, Long Description, Category columns)
+      const shouldCheckCase = !isFeatures && !isLongDesc && !isCat && strVal.trim() && !/^[\d\s\/\.\-\,]+$/.test(strVal.trim());
+      if (shouldCheckCase) {
+        const tokens = strVal.trim().split(/\s+/);
+        let sigWordIdx = 0; // counts only alphabetic-bearing tokens
+        const caseProblems = [];
+
+        for (const token of tokens) {
+          // Strip leading/trailing punctuation to get the core word
+          const core = token.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
+          if (!core) continue;
+          if (/^[\d\/\.\-]+$/.test(core)) { sigWordIdx++; continue; } // pure number / fraction — skip
+          const alpha = core.replace(/[^a-zA-Z]/g, '');
+          if (!alpha) { sigWordIdx++; continue; }
+
+          const isMinor = MINOR_WORDS.has(alpha.toLowerCase());
+          const isFirst = sigWordIdx === 0;
+
+          if (!isMinor || isFirst) {
+            // Significant word (or first word) → must start with uppercase
+            if (/^[a-z]/.test(alpha)) {
+              caseProblems.push(`"${core}" should start with capital letter`);
+            }
+          } else {
+            // Minor word (not first) → must be lowercase
+            if (/^[A-Z]/.test(alpha) && alpha !== alpha.toUpperCase()) {
+              // Capitalised minor word like "For" — should be "for"
+              caseProblems.push(`Minor word "${core}" should be lowercase`);
+            }
+            // All-caps minor word like "FOR" in description
+            if (isDescCol && alpha === alpha.toUpperCase() && alpha.length > 1) {
+              caseProblems.push(`Minor word "${core}" in ALL CAPS (should be "${alpha.toLowerCase()}")`);
+            }
+            if (!isDescCol && alpha === alpha.toUpperCase() && alpha.length > 1) {
+              caseProblems.push(`Minor word "${core}" should be lowercase`);
+            }
+          }
+          sigWordIdx++;
+        }
+
+        if (caseProblems.length) {
+          issues.push('Proper Case issue: ' + caseProblems.join('; '));
+        }
+      }
+
+      // 12. Description all-caps minor words (even when rest of proper case is OK)
+      if (isDescCol && strVal.trim() && !shouldCheckCase) {
+        // Still check for all-caps minor words in description even if shouldCheckCase was false
+        const dtokens = strVal.trim().split(/\s+/);
+        const descMinorProblems = [];
+        for (const tk of dtokens) {
+          const dc = tk.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
+          if (!dc) continue;
+          const da = dc.replace(/[^a-zA-Z]/g, '');
+          if (!da || da.length <= 1) continue;
+          if (MINOR_WORDS.has(da.toLowerCase()) && da === da.toUpperCase()) {
+            descMinorProblems.push(`Minor word "${dc}" in ALL CAPS (should be "${da.toLowerCase()}")`);
+          }
+        }
+        if (descMinorProblems.length) {
+          issues.push('Proper Case issue: ' + descMinorProblems.join('; '));
+        }
+      }
+
       return issues;
     }
 
@@ -2390,6 +2465,7 @@ processSheetsBtn.addEventListener('click', async () => {
       if (issues.some(i => i.includes('Double space'))) return YELLOW;
       if (issues.some(i => i.includes('& symbol'))) return BLUE;
       if (issues.some(i => i.includes('Empty required'))) return PURPLE;
+      if (issues.some(i => i.includes('Proper Case issue') || i.includes('starts with a numeric'))) return LIME;
       return RED;
     }
 
