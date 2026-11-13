@@ -28,11 +28,98 @@ function isValidUpcChecksum(cleanUpc) {
     const expected = (10 - (sum % 10)) % 10;
     return parseInt(cleanUpc[12], 10) === expected;
   }
-  return true; // don't fail length check here
+  return true;
 }
 
 function normalizeStr(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Generate sensible normalization variants for an Item/Part Number
+ * Handles leading zeros, suffixes, punctuation, and uppercase/lowercase.
+ */
+function getItemVariants(itemNo) {
+  if (!itemNo) return [];
+  const raw = String(itemNo).trim();
+  const variants = new Set();
+  const lower = raw.toLowerCase();
+  variants.add(lower);
+
+  // Pure alphanumeric
+  const alphaNum = lower.replace(/[^a-z0-9]/g, '');
+  if (alphaNum) variants.add(alphaNum);
+
+  // Strip leading zeros: e.g. "0208036" -> "208036"
+  const noLeadingZero = alphaNum.replace(/^0+/, '');
+  if (noLeadingZero && noLeadingZero.length >= 3) variants.add(noLeadingZero);
+
+  // Strip single-letter packaging or revision suffixes: e.g. "208036U" -> "208036"
+  const noSuffix = alphaNum.replace(/[a-z]$/i, '');
+  if (noSuffix && noSuffix.length >= 4) variants.add(noSuffix);
+
+  return Array.from(variants);
+}
+
+/**
+ * Parse upcitemdb HTML into structured product data including title, specs, variations, and store listings.
+ */
+function extractPageData(html) {
+  const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+  let dbTitle = titleMatch ? titleMatch[1].replace(/\|\s*upcitemdb\.com/i, '').replace(/^UPC\s*\d+\s*-\s*/i, '').trim() : '';
+
+  const specs = {};
+  const trMatches = html.match(/<tr>[\s\S]*?<\/tr>/gi) || [];
+  const storeRows = [];
+  
+  for (const tr of trMatches) {
+    const tdMatches = tr.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || [];
+    if (tdMatches.length >= 2) {
+      const col1 = tdMatches[0].replace(/<[^>]+>/g, '').trim();
+      const col2 = tdMatches[1].replace(/<[^>]+>/g, '').trim();
+      const key = col1.toLowerCase().replace(/:$/, '').trim();
+      if (['brand', 'model #', 'model', 'part number', 'manufacturer', 'color'].includes(key)) {
+        specs[key] = col2;
+      } else if (!col1.toLowerCase().includes('stores') && col2) {
+        storeRows.push(col2);
+      }
+    }
+  }
+
+  const dbBrand = specs['brand'] || specs['manufacturer'] || '';
+  const dbModel = specs['model #'] || specs['model'] || specs['part number'] || '';
+
+  // Extract from Product Name Variations list
+  const variations = [];
+  const varSectionMatch = html.match(/Product Name Variations:[\s\S]*?<\/ol>/i);
+  if (varSectionMatch) {
+    const liMatches = varSectionMatch[0].match(/<li[^>]*>([\s\S]*?)<\/li>/gi) || [];
+    for (const li of liMatches) {
+      const v = li.replace(/<[^>]+>/g, '').trim();
+      if (v) variations.push(v);
+    }
+  }
+
+  // Include store row descriptions
+  for (const s of storeRows) {
+    if (s && !variations.includes(s)) variations.push(s);
+  }
+
+  // Clean visible text of page
+  const cleanPageText = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ');
+
+  return {
+    dbTitle,
+    dbBrand,
+    dbModel,
+    specs,
+    variations,
+    cleanPageText
+  };
 }
 
 /**
@@ -87,7 +174,7 @@ async function validateUpcItem({ upc, itemNo, brand, description }) {
         'Accept-Language': 'en-US,en;q=0.9',
         'Referer': 'https://www.upcitemdb.com/'
       },
-      timeout: 12000,
+      timeout: 15000,
       validateStatus: () => true
     });
 
@@ -101,64 +188,115 @@ async function validateUpcItem({ upc, itemNo, brand, description }) {
         message: 'UPC not found in database',
         dbTitle: '',
         dbBrand: '',
-        dbModel: ''
+        dbModel: '',
+        url
       };
     }
 
-    const html = res.data;
-
-    // Extract title
-    const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
-    let dbTitle = titleMatch ? titleMatch[1].replace(/\|\s*upcitemdb\.com/i, '').replace(/^UPC\s*\d+\s*-\s*/i, '').trim() : '';
-
-    // Extract table info
-    const info = {};
-    const trMatches = html.match(/<tr>[\s\S]*?<\/tr>/gi) || [];
-    for (const tr of trMatches) {
-      const tdMatches = tr.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || [];
-      if (tdMatches.length >= 2) {
-        const key = tdMatches[0].replace(/<[^>]+>/g, '').trim().toLowerCase();
-        const val = tdMatches[1].replace(/<[^>]+>/g, '').trim();
-        if (key && val) info[key] = val;
-      }
-    }
-
-    const dbBrand = info['brand:'] || info['brand'] || '';
-    const dbModel = info['model #:'] || info['model'] || info['part number'] || '';
-
-    // 4. Compare with user's Item No
-    const normItemNo = normalizeStr(itemNo);
+    const { dbTitle, dbBrand, dbModel, variations, cleanPageText } = extractPageData(res.data);
     const normDbModel = normalizeStr(dbModel);
     const normDbTitle = normalizeStr(dbTitle);
+    const normPageText = normalizeStr(cleanPageText);
 
     let isMatch = false;
     let matchReason = '';
 
-    if (normItemNo) {
-      if (normDbModel && (normDbModel === normItemNo || normDbModel.includes(normItemNo) || normItemNo.includes(normDbModel))) {
-        isMatch = true;
-        matchReason = `Exact model match: "${dbModel || itemNo}"`;
-      } else if (normDbTitle && normDbTitle.includes(normItemNo)) {
-        isMatch = true;
-        matchReason = `Item No found in title: "${dbTitle}"`;
-      } else if (dbModel && normDbModel !== normItemNo) {
-        // DB explicitly has a DIFFERENT model number
-        isMatch = false;
-        matchReason = `Mismatch: UPC belongs to model "${dbModel}", expected "${itemNo}"`;
-      } else {
-        // Model not listed in DB, check if title or brand gives any clue
-        const normBrand = normalizeStr(brand);
-        const normDbBrand = normalizeStr(dbBrand);
-        if (normBrand && normDbBrand && normDbBrand.includes(normBrand)) {
+    const itemVariants = getItemVariants(itemNo);
+
+    if (itemVariants.length > 0) {
+      // Tier 1: Direct model check
+      for (const v of itemVariants) {
+        if (normDbModel && (normDbModel === v || normDbModel.includes(v) || v.includes(normDbModel))) {
           isMatch = true;
-          matchReason = `Brand match (${dbBrand}) but exact model not specified in title: "${dbTitle}"`;
-        } else {
-          isMatch = false;
-          matchReason = `Item No "${itemNo}" not found in title "${dbTitle}"`;
+          matchReason = `Exact model match: "${dbModel || itemNo}"`;
+          break;
         }
       }
+
+      // Tier 2: Title check
+      if (!isMatch) {
+        for (const v of itemVariants) {
+          if (normDbTitle && normDbTitle.includes(v)) {
+            isMatch = true;
+            matchReason = `Item No found in title: "${dbTitle}"`;
+            break;
+          }
+        }
+      }
+
+      // Tier 3: Variations & Store Listings check (Build.com, Newegg, Walmart, etc.)
+      if (!isMatch) {
+        for (const v of itemVariants) {
+          if (v.length >= 3) {
+            const matchedVar = variations.find(varStr => normalizeStr(varStr).includes(v));
+            if (matchedVar) {
+              isMatch = true;
+              matchReason = `Item No verified in product listings: "${matchedVar.slice(0, 60)}"`;
+              break;
+            }
+          }
+        }
+      }
+
+      // Tier 4: Page full text check (specifications, dimensions, descriptions)
+      if (!isMatch) {
+        for (const v of itemVariants) {
+          if (v.length >= 4 && normPageText.includes(v)) {
+            isMatch = true;
+            matchReason = `Item No "${itemNo}" verified in database product data`;
+            break;
+          }
+        }
+      }
+
+      // Tier 5: Description & Brand Match (Smart Fallback)
+      if (!isMatch && (description || brand)) {
+        const normBrand = normalizeStr(brand);
+        const normDbBrand = normalizeStr(dbBrand);
+        const brandMatches = normBrand && (normDbBrand.includes(normBrand) || normBrand.includes(normDbBrand) || normPageText.includes(normBrand));
+
+        if (description) {
+          const userWords = String(description).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !['the','and','for','with','each','inch','type','size'].includes(w));
+          let matchCount = 0;
+          for (const w of userWords) {
+            if (normDbTitle.includes(w) || variations.some(v => v.toLowerCase().includes(w))) {
+              matchCount++;
+            }
+          }
+          const overlapRatio = userWords.length > 0 ? (matchCount / userWords.length) : 0;
+          if (overlapRatio >= 0.5 || (brandMatches && matchCount >= 2)) {
+            isMatch = true;
+            matchReason = `Product & description match: "${dbTitle}"`;
+          }
+        } else if (brandMatches && !dbModel) {
+          isMatch = true;
+          matchReason = `Brand match (${dbBrand}) for UPC: "${dbTitle}"`;
+        }
+      }
+
+      // If STILL not matched, then and only then flag MISMATCH
+      if (!isMatch) {
+        matchReason = `Mismatch: UPC belongs to "${dbTitle || dbModel || 'different product'}" (${dbBrand ? 'Brand: ' + dbBrand + ', ' : ''}Model: ${dbModel || 'N/A'}), does not match "${itemNo}"`;
+      }
+
+    } else if (description) {
+      // No itemNo provided, but description provided
+      const userWords = String(description).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3);
+      let matchCount = 0;
+      for (const w of userWords) {
+        if (normDbTitle.includes(w) || variations.some(v => v.toLowerCase().includes(w))) {
+          matchCount++;
+        }
+      }
+      if (matchCount >= 2 || (userWords.length === 1 && matchCount === 1)) {
+        isMatch = true;
+        matchReason = `Description match: "${dbTitle}"`;
+      } else {
+        isMatch = true;
+        matchReason = `UPC verified in DB: "${dbTitle}"`;
+      }
     } else {
-      // If no itemNo provided, we can only confirm UPC exists in DB
+      // Neither itemNo nor description provided - check if UPC exists in DB
       isMatch = true;
       matchReason = `UPC verified in DB: "${dbTitle}"`;
     }
