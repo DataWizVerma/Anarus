@@ -164,20 +164,70 @@ async function validateUpcItem({ upc, itemNo, brand, description }) {
     };
   }
 
-  // 3. Query upcitemdb.com
+  // 3. Query upcitemdb.com (with retry on rate-limit)
   const url = `https://www.upcitemdb.com/upc/${cleanUpc}`;
-  try {
-    const res = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://www.upcitemdb.com/'
-      },
-      timeout: 15000,
-      validateStatus: () => true
-    });
 
+  // Helper: check if the response is a rate-limit page (HTTP 200 but "Too Fast" body)
+  function isRateLimitResponse(status, html) {
+    if (status === 429) return true;
+    if (typeof html !== 'string') return false;
+    const lower = html.toLowerCase();
+    if (lower.includes('too fast') || lower.includes('too many requests') || lower.includes('rate limit')) return true;
+    // Title-only "Too Fast" page
+    const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+    if (titleMatch && titleMatch[1].toLowerCase().trim() === 'too fast') return true;
+    return false;
+  }
+
+  const MAX_RETRIES = 4;
+  let res = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      res = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.upcitemdb.com/'
+        },
+        timeout: 20000,
+        validateStatus: () => true
+      });
+    } catch (netErr) {
+      if (attempt === MAX_RETRIES) throw netErr;
+      await new Promise(r => setTimeout(r, attempt * 2000));
+      continue;
+    }
+
+    if (isRateLimitResponse(res.status, res.data)) {
+      if (attempt === MAX_RETRIES) {
+        // All retries exhausted → return RATE_LIMITED status (never MISMATCH)
+        return {
+          upc: rawUpc,
+          cleanUpc,
+          itemNo,
+          status: 'RATE_LIMITED',
+          isValid: false,
+          message: 'Database rate limit hit — retry later or reduce batch speed',
+          dbTitle: '',
+          dbBrand: '',
+          dbModel: '',
+          url
+        };
+      }
+      // Wait exponentially: 3s, 6s, 9s before retrying
+      const waitMs = attempt * 3000;
+      console.log(`[upc-validator] Rate limited on attempt ${attempt} for ${cleanUpc}. Waiting ${waitMs}ms…`);
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
+
+    // Got a real response — break out of retry loop
+    break;
+  }
+
+  try {
     if (res.status === 404 || res.data.includes('Page Not Found') || res.data.includes('No product found')) {
       return {
         upc: rawUpc,

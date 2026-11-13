@@ -409,7 +409,8 @@ async function processUpcBatch(socket, items, cancelled) {
 }
 
 // ─── UPC Validation Batch Processor ──────────────────────────────────────────
-const UPC_VAL_CONCURRENCY = 3;
+// Sequential (concurrency=1) to avoid rate-limiting from upcitemdb.com
+const UPC_VAL_CONCURRENCY = 1;
 
 async function processUpcValidationBatch(socket, items, cancelled) {
   const total = items.length;
@@ -418,6 +419,7 @@ async function processUpcValidationBatch(socket, items, cancelled) {
   let mismatchCount = 0;
   let notFoundCount = 0;
   let invalidCount = 0;
+  let rateLimitedCount = 0;
   const startTime = Date.now();
 
   const queue = items.map((it, idx) => ({ ...it, __idx: idx }));
@@ -438,6 +440,7 @@ async function processUpcValidationBatch(socket, items, cancelled) {
       mismatchCount,
       notFoundCount,
       invalidCount,
+      rateLimitedCount,
       currentItem: itemLabel || 'Validating...',
       percent,
       etaMs: remaining,
@@ -483,6 +486,9 @@ async function processUpcValidationBatch(socket, items, cancelled) {
         mismatchCount++;
       } else if (result.status === 'NOT_FOUND_IN_DB') {
         notFoundCount++;
+      } else if (result.status === 'RATE_LIMITED') {
+        rateLimitedCount++;
+        invalidCount++;
       } else {
         invalidCount++;
       }
@@ -495,8 +501,11 @@ async function processUpcValidationBatch(socket, items, cancelled) {
 
       emitProgress(null);
 
-      // Small polite delay between requests to avoid rate limits
-      await new Promise(r => setTimeout(r, 200));
+      // Polite delay between requests: 1200–1600ms (avoids upcitemdb rate limiting)
+      if (queue.length > 0 && !cancelled.value) {
+        const delay = 1200 + Math.floor(Math.random() * 400);
+        await new Promise(r => setTimeout(r, delay));
+      }
     }
     activeWorkers--;
     if (activeWorkers === 0 && resolveAll) resolveAll();
@@ -514,6 +523,7 @@ async function processUpcValidationBatch(socket, items, cancelled) {
       mismatchCount,
       notFoundCount,
       invalidCount,
+      rateLimitedCount,
     });
   } else {
     socket.emit('upcValBatchComplete', {
@@ -522,6 +532,7 @@ async function processUpcValidationBatch(socket, items, cancelled) {
       mismatchCount,
       notFoundCount,
       invalidCount,
+      rateLimitedCount,
     });
   }
 }

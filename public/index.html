@@ -3731,6 +3731,8 @@ dlBtn.addEventListener('click',async function(){
             badgeHtml = `<span class="badge-mismatch"><i class="fas fa-circle-xmark"></i> Mismatch</span>`;
           } else if (data.status === 'NOT_FOUND_IN_DB') {
             badgeHtml = `<span class="badge-notfound"><i class="fas fa-circle-question"></i> Not In DB</span>`;
+          } else if (data.status === 'RATE_LIMITED') {
+            badgeHtml = `<span class="badge-invalid" style="background:#fef3c7;color:#92400e;border-color:#fde68a;"><i class="fas fa-clock"></i> Rate Limited — Try Again</span>`;
           } else {
             badgeHtml = `<span class="badge-invalid"><i class="fas fa-ban"></i> ${escHtml(data.status)}</span>`;
           }
@@ -4386,6 +4388,8 @@ dlBtn.addEventListener('click',async function(){
       badgeHtml = `<span class="badge-mismatch"><i class="fas fa-circle-xmark"></i> Mismatch</span>`;
     } else if (r.status === 'NOT_FOUND_IN_DB') {
       badgeHtml = `<span class="badge-notfound"><i class="fas fa-circle-question"></i> Not In DB</span>`;
+    } else if (r.status === 'RATE_LIMITED') {
+      badgeHtml = `<span class="badge-invalid" style="background:#fef3c7;color:#92400e;border-color:#fde68a;"><i class="fas fa-clock"></i> Rate Limited</span>`;
     } else if (r.status === 'In Queue') {
       badgeHtml = `<span class="badge-notfound"><i class="fas fa-spinner fa-spin"></i> In Queue</span>`;
     } else {
@@ -4412,7 +4416,7 @@ dlBtn.addEventListener('click',async function(){
         <td><span class="item-no-tag">${escHtml(r.itemNo || '—')}</span></td>
         <td>${upcCell}</td>
         <td>${badgeHtml}</td>
-        <td title="${escAttr(r.message || '')}"><span style="font-size:0.75rem; color:${r.status === 'MISMATCH' ? '#f87171' : 'var(--text2)'}">${escHtml(trunc(r.message || '—', 55))}</span></td>
+        <td title="${escAttr(r.message || '')}"><span style="font-size:0.75rem; color:${r.status === 'MISMATCH' ? '#f87171' : r.status === 'RATE_LIMITED' ? '#92400e' : 'var(--text2)'}">${escHtml(trunc(r.message || '—', 55))}</span></td>
         <td title="${escAttr(r.dbTitle || '')}">${escHtml(trunc(r.dbTitle || '—', 40))}</td>
         <td style="font-family:'Courier New',monospace; font-weight:600;">${escHtml(r.dbModel || '—')}</td>
         <td style="font-weight:600;">${escHtml(r.dbBrand || '—')}</td>
