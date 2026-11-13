@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const axios = require('axios');
 const { findUpcForItem } = require('./upc-finder');
+const { validateUpcItem } = require('./upc-validator');
 
 const app = express();
 const server = http.createServer(app);
@@ -94,6 +95,20 @@ app.post('/api/upc/lookup-single', async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message || 'Error looking up UPC' });
+  }
+});
+
+// ─── UPC Single Item Validate Endpoint ───────────────────────────────────────
+app.post('/api/upc/validate-single', async (req, res) => {
+  try {
+    const { upc, itemNo, brand, description } = req.body;
+    if (!upc) {
+      return res.status(400).json({ error: 'Please provide a UPC to validate' });
+    }
+    const result = await validateUpcItem({ upc, itemNo, brand, description });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Error validating UPC' });
   }
 });
 
@@ -393,6 +408,124 @@ async function processUpcBatch(socket, items, cancelled) {
   }
 }
 
+// ─── UPC Validation Batch Processor ──────────────────────────────────────────
+const UPC_VAL_CONCURRENCY = 3;
+
+async function processUpcValidationBatch(socket, items, cancelled) {
+  const total = items.length;
+  let checked = 0;
+  let validCount = 0;
+  let mismatchCount = 0;
+  let notFoundCount = 0;
+  let invalidCount = 0;
+  const startTime = Date.now();
+
+  const queue = items.map((it, idx) => ({ ...it, __idx: idx }));
+  let activeWorkers = 0;
+  let resolveAll = null;
+  const allDone = new Promise(resolve => { resolveAll = resolve; });
+
+  function emitProgress(itemLabel) {
+    const percent = total > 0 ? (checked / total) * 100 : 0;
+    const elapsed = Date.now() - startTime;
+    const avgTime = elapsed / (checked || 1);
+    const remaining = (total - checked) * avgTime;
+
+    socket.emit('upcValProgress', {
+      checked,
+      total,
+      validCount,
+      mismatchCount,
+      notFoundCount,
+      invalidCount,
+      currentItem: itemLabel || 'Validating...',
+      percent,
+      etaMs: remaining,
+      avgTimeMs: avgTime,
+    });
+  }
+
+  async function worker() {
+    while (queue.length > 0 && !cancelled.value) {
+      const item = queue.shift();
+      const label = item.upc ? `${item.itemNo || 'Item'} (${item.upc})` : (item.itemNo || `Item #${item.__idx + 1}`);
+      emitProgress(label);
+
+      let result;
+      try {
+        result = await validateUpcItem({
+          upc: item.upc,
+          itemNo: item.itemNo,
+          brand: item.brand,
+          description: item.description
+        });
+      } catch (err) {
+        result = {
+          upc: item.upc || '',
+          cleanUpc: '',
+          itemNo: item.itemNo || '',
+          status: 'LOOKUP_ERROR',
+          isValid: false,
+          message: err.message || 'Validation error',
+          dbTitle: '',
+          dbBrand: '',
+          dbModel: '',
+          url: ''
+        };
+      }
+
+      if (cancelled.value) break;
+
+      checked++;
+      if (result.status === 'VALID') {
+        validCount++;
+      } else if (result.status === 'MISMATCH') {
+        mismatchCount++;
+      } else if (result.status === 'NOT_FOUND_IN_DB') {
+        notFoundCount++;
+      } else {
+        invalidCount++;
+      }
+
+      socket.emit('upcValItemResult', {
+        id: item.id !== undefined ? item.id : item.__idx,
+        index: item.__idx,
+        result,
+      });
+
+      emitProgress(null);
+
+      // Small polite delay between requests to avoid rate limits
+      await new Promise(r => setTimeout(r, 200));
+    }
+    activeWorkers--;
+    if (activeWorkers === 0 && resolveAll) resolveAll();
+  }
+
+  activeWorkers = Math.min(UPC_VAL_CONCURRENCY, total);
+  for (let i = 0; i < activeWorkers; i++) worker();
+  await allDone;
+
+  if (cancelled.value) {
+    socket.emit('upcValBatchCancelled', {
+      checked,
+      total,
+      validCount,
+      mismatchCount,
+      notFoundCount,
+      invalidCount,
+    });
+  } else {
+    socket.emit('upcValBatchComplete', {
+      total,
+      validCount,
+      mismatchCount,
+      notFoundCount,
+      invalidCount,
+    });
+  }
+}
+
 // ─── Socket connections ──────────────────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
@@ -401,6 +534,9 @@ io.on('connection', (socket) => {
 
   let isUpcScanning = false;
   const upcCancelled = { value: false };
+
+  let isUpcValScanning = false;
+  const upcValCancelled = { value: false };
 
   // Broken Link Checker events
   socket.on('startCheck', async (data) => {
@@ -454,9 +590,36 @@ io.on('connection', (socket) => {
     }
   });
 
+  // UPC Validation events
+  socket.on('startUpcValBatch', async (data) => {
+    if (isUpcValScanning) return;
+    const items = data.items;
+    if (!items || !items.length) {
+      socket.emit('upcValError', { message: 'No items provided for UPC validation' });
+      return;
+    }
+    isUpcValScanning = true;
+    upcValCancelled.value = false;
+    try {
+      await processUpcValidationBatch(socket, items, upcValCancelled);
+    } catch (err) {
+      socket.emit('upcValError', { message: err.message });
+    } finally {
+      isUpcValScanning = false;
+    }
+  });
+
+  socket.on('stopUpcValBatch', () => {
+    if (isUpcValScanning) {
+      upcValCancelled.value = true;
+      console.log('UPC validation stopped by client:', socket.id);
+    }
+  });
+
   socket.on('disconnect', () => {
     cancelled.value = true;
     upcCancelled.value = true;
+    upcValCancelled.value = true;
     console.log('Client disconnected:', socket.id);
   });
 });

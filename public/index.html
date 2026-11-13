@@ -627,6 +627,24 @@
       padding: 2px 8px; border-radius: 99px; font-size: 0.72rem; font-weight: 600;
       display: inline-flex; align-items: center; gap: 4px;
     }
+    .badge-valid {
+      background: rgba(34,197,94,0.14); color: #22c55e;
+      border: 1px solid rgba(34,197,94,0.3);
+      padding: 2px 8px; border-radius: 99px; font-size: 0.72rem; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .badge-mismatch {
+      background: rgba(239,68,68,0.15); color: #ef4444;
+      border: 1px solid rgba(239,68,68,0.35);
+      padding: 2px 8px; border-radius: 99px; font-size: 0.72rem; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .badge-invalid {
+      background: rgba(220,38,38,0.2); color: #f87171;
+      border: 1px solid rgba(239,68,68,0.45);
+      padding: 2px 8px; border-radius: 99px; font-size: 0.72rem; font-weight: 600;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
     .upc-code-wrap {
       display: inline-flex; align-items: center; gap: 6px;
       font-family: 'Courier New', monospace; font-size: 0.88rem; font-weight: 700;
@@ -1131,16 +1149,26 @@
   </div>
 
   <!-- ══════════════════════════════════════════════════════════════
-       TOOL 5: UPC / BARCODE FINDER
+       TOOL 5: UPC / BARCODE FINDER & VALIDATOR
   ══════════════════════════════════════════════════════════════════ -->
   <div id="tool-upc" class="tool-section">
     <div class="card">
       <div class="card-hd">
         <div class="card-icon ci-amber"><i class="fas fa-barcode"></i></div>
         <div>
-          <div class="card-title">UPC / Barcode Finder</div>
-          <div class="card-sub">Data Specialist Tool · Automated lookup across Manufacturer sites &amp; Distributors (Excludes Amazon &amp; eBay) · Consensus validation &amp; conflict flagging</div>
+          <div class="card-title" id="upcCardTitle">UPC / Barcode Finder &amp; Validator</div>
+          <div class="card-sub" id="upcCardSub">Data Specialist Tool · Automated lookup across Manufacturer sites &amp; Distributors (Excludes Amazon &amp; eBay) · Consensus validation &amp; conflict flagging</div>
         </div>
+      </div>
+
+      <!-- Mode Toggle (Find vs Validate) -->
+      <div class="mode-toggle" id="upcModeToggle" style="margin-bottom:1.15rem;">
+        <button class="mode-btn active" data-upcmode="finder" id="btnModeUpcFinder">
+          <i class="fas fa-magnifying-glass"></i> Find Missing UPCs
+        </button>
+        <button class="mode-btn" data-upcmode="validator" id="btnModeUpcValidator">
+          <i class="fas fa-shield-halved"></i> Validate Existing UPCs (UPCitemdb)
+        </button>
       </div>
 
       <!-- Header Quick Actions -->
@@ -1150,10 +1178,10 @@
             <i class="fas fa-file-excel" style="color:var(--green)"></i> Download Excel Template
           </button>
           <button class="btn btn-ghost btn-sm" id="upcManualToggleBtn">
-            <i class="fas fa-magnifying-glass"></i> Single Item Test
+            <i class="fas fa-vial"></i> Single Item Test
           </button>
         </div>
-        <div style="font-size:0.75rem; color:var(--text3); display:flex; align-items:center; gap:0.35rem;">
+        <div style="font-size:0.75rem; color:var(--text3); display:flex; align-items:center; gap:0.35rem;" id="upcModeBadgeNotice">
           <i class="fas fa-shield-halved" style="color:var(--accent2)"></i> Amazon &amp; eBay Excluded (Direct &amp; Clean Sources Only)
         </div>
       </div>
@@ -1161,26 +1189,30 @@
       <!-- Single Item Quick Test (Collapsible) -->
       <div id="upcManualBox" style="display:none; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:1rem; margin-bottom:1.25rem;">
         <div style="font-size:0.82rem; font-weight:700; color:var(--text); margin-bottom:0.75rem; display:flex; align-items:center; gap:0.4rem;">
-          <i class="fas fa-vial" style="color:var(--accent)"></i> Quick Single Part Test
+          <i class="fas fa-vial" style="color:var(--accent)"></i> <span id="upcSingleBoxTitle">Quick Single Part Test</span>
         </div>
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.6rem; margin-bottom:0.75rem;">
-          <div>
+          <div id="upcSingleItemNoWrap">
             <label class="field-label" style="margin-bottom:0.25rem;">Item No / Part # *</label>
-            <input type="text" id="upcSingleItemNo" placeholder="e.g. 12000000133 or DWE6423K" style="width:100%; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:0.45rem 0.65rem; color:var(--text); font-size:0.8rem;">
+            <input type="text" id="upcSingleItemNo" placeholder="e.g. TLC-3-12 or DWE6423K" style="width:100%; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:0.45rem 0.65rem; color:var(--text); font-size:0.8rem;">
           </div>
-          <div>
+          <div id="upcSingleValidateWrap" style="display:none;">
+            <label class="field-label" style="margin-bottom:0.25rem; color:#38bdf8;"><i class="fas fa-barcode"></i> UPC Code (12 digits) *</label>
+            <input type="text" id="upcSingleUpcCode" placeholder="e.g. 095247144624" style="width:100%; background:var(--surface); border:1px solid rgba(56,189,248,0.4); border-radius:6px; padding:0.45rem 0.65rem; color:#38bdf8; font-family:'Courier New',monospace; font-weight:700; font-size:0.85rem;">
+          </div>
+          <div id="upcSingleBrandWrap">
             <label class="field-label" style="margin-bottom:0.25rem;">Brand / Manufacturer</label>
-            <input type="text" id="upcSingleBrand" placeholder="e.g. DEWALT or Pepsi" style="width:100%; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:0.45rem 0.65rem; color:var(--text); font-size:0.8rem;">
+            <input type="text" id="upcSingleBrand" placeholder="e.g. Diversitech or DEWALT" style="width:100%; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:0.45rem 0.65rem; color:var(--text); font-size:0.8rem;">
           </div>
-          <div>
+          <div id="upcSingleTypeWrap">
             <label class="field-label" style="margin-bottom:0.25rem;">Product Type</label>
             <input type="text" id="upcSingleType" placeholder="e.g. Sander or Beverage" style="width:100%; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:0.45rem 0.65rem; color:var(--text); font-size:0.8rem;">
           </div>
-          <div>
+          <div id="upcSingleDescWrap">
             <label class="field-label" style="margin-bottom:0.25rem;">Description</label>
             <input type="text" id="upcSingleDesc" placeholder="e.g. 5 in. Random Orbit Sander" style="width:100%; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:0.45rem 0.65rem; color:var(--text); font-size:0.8rem;">
           </div>
-          <div>
+          <div id="upcSingleRefLinkWrap">
             <label class="field-label" style="margin-bottom:0.25rem;">Mfg Ref Link (Optional)</label>
             <input type="url" id="upcSingleRefLink" placeholder="https://..." style="width:100%; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:0.45rem 0.65rem; color:var(--text); font-size:0.8rem;">
           </div>
@@ -1195,12 +1227,12 @@
 
       <!-- File Upload Zone -->
       <div id="upcUploadZoneWrap">
-        <label class="field-label">Upload Product Data Sheet (Excel / CSV)</label>
+        <label class="field-label" id="upcUploadLabel">Upload Product Data Sheet (Excel / CSV)</label>
         <div class="upload-zone" id="upcUploadZone">
           <input type="file" id="upcFileInput" accept=".xlsx, .xls, .csv">
           <i class="fas fa-file-arrow-up upload-icon" style="color:var(--accent2)"></i>
-          <h3>Drop your Excel or CSV file here, or click to browse</h3>
-          <p>Columns supported: Item No, Product Type, Description, Brand, Mfg Reference Link</p>
+          <h3 id="upcUploadHeading">Drop your Excel or CSV file here, or click to browse</h3>
+          <p id="upcUploadSub">Columns supported: Item No, Product Type, Description, Brand, Mfg Reference Link</p>
         </div>
       </div>
 
@@ -1218,24 +1250,28 @@
           <i class="fas fa-wand-magic-sparkles" style="color:var(--accent)"></i> We auto-detected column headers. Verify or adjust mappings below:
         </div>
 
-        <div class="column-map-grid">
-          <div class="column-map-item">
+        <div class="column-map-grid" id="upcColumnMapGrid">
+          <div class="column-map-item" id="colMapValUpcWrap" style="display:none;">
+            <label style="color:#38bdf8;"><i class="fas fa-barcode"></i> UPC / Barcode (12 digits) *</label>
+            <select id="mapValUpc" style="border-color:rgba(56,189,248,0.5);"></select>
+          </div>
+          <div class="column-map-item" id="colMapItemNoWrap">
             <label><i class="fas fa-hashtag" style="color:var(--accent)"></i> Item No / Part # *</label>
             <select id="mapItemNo"></select>
           </div>
-          <div class="column-map-item">
+          <div class="column-map-item" id="colMapBrandWrap">
             <label><i class="fas fa-tag" style="color:var(--accent2)"></i> Brand / Mfg</label>
             <select id="mapBrand"></select>
           </div>
-          <div class="column-map-item">
+          <div class="column-map-item" id="colMapTypeWrap">
             <label><i class="fas fa-folder-tree" style="color:#38bdf8"></i> Product Type</label>
             <select id="mapType"></select>
           </div>
-          <div class="column-map-item">
+          <div class="column-map-item" id="colMapDescWrap">
             <label><i class="fas fa-align-left" style="color:#a78bfa"></i> Description</label>
             <select id="mapDesc"></select>
           </div>
-          <div class="column-map-item">
+          <div class="column-map-item" id="colMapRefLinkWrap">
             <label><i class="fas fa-link" style="color:var(--green)"></i> Mfg Reference Link</label>
             <select id="mapRefLink"></select>
           </div>
@@ -1245,7 +1281,7 @@
           <button class="btn btn-primary btn-lg" id="upcStartBtn">
             <i class="fas fa-barcode"></i> Start Finding UPCs
           </button>
-          <div style="font-size:0.75rem; color:var(--text3);">
+          <div style="font-size:0.75rem; color:var(--text3);" id="upcStartSubText">
             Prioritizes Manufacturer URLs &rarr; Distributors &middot; Checksum validated
           </div>
         </div>
@@ -1253,7 +1289,8 @@
 
       <!-- Live Progress & Metrics Section -->
       <div id="upcProgressSection" style="display:none; margin-top:1.25rem;">
-        <div class="stats-row" style="grid-template-columns: repeat(4, 1fr);">
+        <!-- Finder Stats -->
+        <div class="stats-row" id="upcFinderStatsRow" style="grid-template-columns: repeat(4, 1fr);">
           <div class="stat-box">
             <div class="stat-val sv-blue" id="upcStatTotal">0</div>
             <div class="stat-lbl">Total Items</div>
@@ -1272,9 +1309,33 @@
           </div>
         </div>
 
+        <!-- Validator Stats -->
+        <div class="stats-row" id="upcValidatorStatsRow" style="display:none; grid-template-columns: repeat(5, 1fr);">
+          <div class="stat-box">
+            <div class="stat-val sv-blue" id="valStatTotal">0</div>
+            <div class="stat-lbl">Total Checked</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val sv-green" id="valStatValid">0</div>
+            <div class="stat-lbl">Valid Match ✅</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" style="color:#ef4444" id="valStatMismatch">0</div>
+            <div class="stat-lbl">Mismatches ❌</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" style="color:#eab308" id="valStatNotFound">0</div>
+            <div class="stat-lbl">Not in DB ⚠</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" style="color:#f87171" id="valStatInvalid">0</div>
+            <div class="stat-lbl">Invalid Checksum/Len ⛔</div>
+          </div>
+        </div>
+
         <div class="progress-wrap">
           <div class="progress-hdr">
-            <span><i class="fas fa-barcode" style="color:var(--accent)"></i> &nbsp;Lookup Progress</span>
+            <span><i class="fas fa-barcode" style="color:var(--accent)"></i> &nbsp;<span id="upcProgressTitle">Lookup Progress</span></span>
             <span class="progress-pct" id="upcProgressPct">0%</span>
           </div>
           <div class="progress-track2"><div class="progress-fill2" id="upcProgressFill" style="width:0%"></div></div>
@@ -1306,6 +1367,9 @@
             <button class="btn btn-ghost btn-sm" id="upcExportReviewBtn" title="Export only items that need review" style="border-color:#eab308; color:#eab308;">
               <i class="fas fa-triangle-exclamation"></i> Export "Need Review" Only
             </button>
+            <button class="btn btn-ghost btn-sm" id="upcExportMismatchBtn" style="display:none; border-color:#ef4444; color:#ef4444;">
+              <i class="fas fa-circle-xmark"></i> Export Mismatches Only (.xlsx)
+            </button>
             <button class="btn btn-ghost btn-sm" id="upcExportCsvBtn">
               <i class="fas fa-file-csv"></i> CSV
             </button>
@@ -1314,12 +1378,23 @@
 
         <!-- Table Toolbar & Filter Bar -->
         <div class="toolbar" style="justify-content:space-between; margin-bottom:0.75rem;">
-          <div class="filter-pills" id="upcFilterPills">
+          <!-- Finder Filter Pills -->
+          <div class="filter-pills" id="upcFinderFilterPills">
             <button class="filter-pill active" data-filter="all" id="pillAll">All (<span id="cntPillAll">0</span>)</button>
             <button class="filter-pill" data-filter="verified" id="pillVerified">Verified (<span id="cntPillVerified">0</span>)</button>
             <button class="filter-pill" data-filter="review" id="pillReview" style="color:#eab308;">Need Review (<span id="cntPillReview">0</span>)</button>
             <button class="filter-pill" data-filter="not_found" id="pillNotFound">Not Found (<span id="cntPillNotFound">0</span>)</button>
           </div>
+
+          <!-- Validator Filter Pills -->
+          <div class="filter-pills" id="upcValidatorFilterPills" style="display:none;">
+            <button class="filter-pill active" data-valfilter="all" id="pillValAll">All (<span id="cntValAll">0</span>)</button>
+            <button class="filter-pill" data-valfilter="valid" id="pillValValid" style="color:#22c55e;">Valid (<span id="cntValValid">0</span>)</button>
+            <button class="filter-pill" data-valfilter="mismatch" id="pillValMismatch" style="color:#ef4444;">Mismatch (<span id="cntValMismatch">0</span>)</button>
+            <button class="filter-pill" data-valfilter="not_found" id="pillValNotFound" style="color:#eab308;">Not in DB (<span id="cntValNotFound">0</span>)</button>
+            <button class="filter-pill" data-valfilter="invalid" id="pillValInvalid" style="color:#f87171;">Invalid Barcode (<span id="cntValInvalid">0</span>)</button>
+          </div>
+
           <div style="min-width:220px;">
             <input type="text" id="upcTableSearch" placeholder="Filter by part, brand, UPC..." style="width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:0.4rem 0.65rem; color:var(--text); font-size:0.78rem;">
           </div>
@@ -1328,20 +1403,8 @@
         <!-- Table View -->
         <div class="upc-table-wrap">
           <table class="upc-table" id="upcWorkingTable">
-            <thead>
-              <tr>
-                <th style="width:40px;">#</th>
-                <th>Item / Part #</th>
-                <th>Brand</th>
-                <th>Product Type</th>
-                <th>Description</th>
-                <th>Found UPC</th>
-                <th>Status</th>
-                <th>Source Type</th>
-                <th>Source Link</th>
-                <th>Review Notes / Conflict Info</th>
-                <th style="width:80px; text-align:center;">Action</th>
-              </tr>
+            <thead id="upcTableHead">
+              <!-- Populated dynamically via JS -->
             </thead>
             <tbody id="upcTableBody">
               <!-- Populated dynamically via JS -->
@@ -3267,231 +3330,523 @@ dlBtn.addEventListener('click',async function(){
 })();
 
 // ══════════════════════════════════════════════════════════════════════════════
-// TOOL 5: UPC / BARCODE FINDER (CLIENT-SIDE ENGINE)
-// ══════════════════════════════════════════════════════════════════════════════
+// TOOL 5: UPC / BARCODE FINDER & VALIDATOR (CLIENT-SIDE ENGINE)
 (function() {
   let upcSocket = null;
   let isScanning = false;
+  let currentMode = 'finder'; // 'finder' or 'validator'
   let rawFileRows = [];
   let fileColumns = [];
   let currentFile = null;
-  let upcResults = [];
+  
+  // Results collections
+  let finderResults = [];
+  let validatorResults = [];
+
   let currentFilter = 'all';
   let searchQuery = '';
   let activeModalIdx = null;
   let modalSelectedUpc = null;
 
-  // DOM Elements
-  const templateBtn     = document.getElementById('upcTemplateBtn');
-  const manualToggleBtn = document.getElementById('upcManualToggleBtn');
-  const manualBox       = document.getElementById('upcManualBox');
-  const singleSearchBtn = document.getElementById('upcSingleSearchBtn');
-  const singleResultDiv = document.getElementById('upcSingleResult');
+  // DOM Elements - Mode Switcher & Card Header
+  const btnModeFinder     = document.getElementById('btnModeUpcFinder');
+  const btnModeValidator  = document.getElementById('btnModeUpcValidator');
+  const cardTitle         = document.getElementById('upcCardTitle');
+  const cardSub           = document.getElementById('upcCardSub');
+  const modeBadgeNotice   = document.getElementById('upcModeBadgeNotice');
 
-  const uploadZoneWrap  = document.getElementById('upcUploadZoneWrap');
-  const uploadZone      = document.getElementById('upcUploadZone');
-  const fileInput       = document.getElementById('upcFileInput');
+  // Quick Action Buttons
+  const templateBtn       = document.getElementById('upcTemplateBtn');
+  const manualToggleBtn   = document.getElementById('upcManualToggleBtn');
+  const manualBox         = document.getElementById('upcManualBox');
+  const singleBoxTitle    = document.getElementById('upcSingleBoxTitle');
+  const singleSearchBtn   = document.getElementById('upcSingleSearchBtn');
+  const singleResultDiv   = document.getElementById('upcSingleResult');
 
-  const configBox       = document.getElementById('upcConfigBox');
-  const fileNameBadge   = document.getElementById('upcFileNameBadge');
-  const rowCountBadge   = document.getElementById('upcRowCountBadge');
-  const changeFileBtn   = document.getElementById('upcChangeFileBtn');
-  const startBtn        = document.getElementById('upcStartBtn');
+  // Single Item Input Wrappers & Inputs
+  const singleItemNo      = document.getElementById('upcSingleItemNo');
+  const singleValidateWrap= document.getElementById('upcSingleValidateWrap');
+  const singleUpcCode     = document.getElementById('upcSingleUpcCode');
+  const singleBrandWrap   = document.getElementById('upcSingleBrandWrap');
+  const singleBrand       = document.getElementById('upcSingleBrand');
+  const singleTypeWrap    = document.getElementById('upcSingleTypeWrap');
+  const singleType        = document.getElementById('upcSingleType');
+  const singleDescWrap    = document.getElementById('upcSingleDescWrap');
+  const singleDesc        = document.getElementById('upcSingleDesc');
+  const singleRefLinkWrap = document.getElementById('upcSingleRefLinkWrap');
+  const singleRefLink     = document.getElementById('upcSingleRefLink');
 
-  const mapItemNo       = document.getElementById('mapItemNo');
-  const mapBrand        = document.getElementById('mapBrand');
-  const mapType         = document.getElementById('mapType');
-  const mapDesc         = document.getElementById('mapDesc');
-  const mapRefLink      = document.getElementById('mapRefLink');
+  // Upload Zone
+  const uploadZoneWrap    = document.getElementById('upcUploadZoneWrap');
+  const uploadZone        = document.getElementById('upcUploadZone');
+  const fileInput         = document.getElementById('upcFileInput');
+  const uploadLabel       = document.getElementById('upcUploadLabel');
+  const uploadHeading     = document.getElementById('upcUploadHeading');
+  const uploadSub         = document.getElementById('upcUploadSub');
 
-  const progressSection = document.getElementById('upcProgressSection');
-  const statTotal       = document.getElementById('upcStatTotal');
-  const statFound       = document.getElementById('upcStatFound');
-  const statReview      = document.getElementById('upcStatReview');
-  const statNotFound    = document.getElementById('upcStatNotFound');
-  const progressPct     = document.getElementById('upcProgressPct');
-  const progressFill    = document.getElementById('upcProgressFill');
-  const currentItemLbl  = document.getElementById('upcCurrentItemLabel');
-  const etaLbl          = document.getElementById('upcEtaLabel');
-  const checkedCountLbl = document.getElementById('upcCheckedCount');
-  const totalCountLbl   = document.getElementById('upcTotalCount');
-  const stopBtn         = document.getElementById('upcStopBtn');
+  // Config & Column Mapping
+  const configBox         = document.getElementById('upcConfigBox');
+  const fileNameBadge     = document.getElementById('upcFileNameBadge');
+  const rowCountBadge     = document.getElementById('upcRowCountBadge');
+  const changeFileBtn     = document.getElementById('upcChangeFileBtn');
+  const startBtn          = document.getElementById('upcStartBtn');
+  const startSubText      = document.getElementById('upcStartSubText');
 
-  const resultsSection  = document.getElementById('upcResultsSection');
-  const tableBadge      = document.getElementById('upcTableBadge');
-  const tableBody       = document.getElementById('upcTableBody');
-  const tableSearch     = document.getElementById('upcTableSearch');
-  const exportXlsxBtn   = document.getElementById('upcExportXlsxBtn');
-  const exportReviewBtn = document.getElementById('upcExportReviewBtn');
-  const exportCsvBtn    = document.getElementById('upcExportCsvBtn');
+  const colMapValUpcWrap  = document.getElementById('colMapValUpcWrap');
+  const mapValUpc         = document.getElementById('mapValUpc');
+  const colMapTypeWrap    = document.getElementById('colMapTypeWrap');
+  const colMapRefLinkWrap = document.getElementById('colMapRefLinkWrap');
+  const mapItemNo         = document.getElementById('mapItemNo');
+  const mapBrand          = document.getElementById('mapBrand');
+  const mapType           = document.getElementById('mapType');
+  const mapDesc           = document.getElementById('mapDesc');
+  const mapRefLink        = document.getElementById('mapRefLink');
 
-  const pillAll         = document.getElementById('pillAll');
-  const pillVerified    = document.getElementById('pillVerified');
-  const pillReview      = document.getElementById('pillReview');
-  const pillNotFound    = document.getElementById('pillNotFound');
-  const cntPillAll      = document.getElementById('cntPillAll');
-  const cntPillVerified = document.getElementById('cntPillVerified');
-  const cntPillReview   = document.getElementById('cntPillReview');
-  const cntPillNotFound = document.getElementById('cntPillNotFound');
+  // Progress Section & Stats
+  const progressSection   = document.getElementById('upcProgressSection');
+  const progressTitle     = document.getElementById('upcProgressTitle');
+  const progressPct       = document.getElementById('upcProgressPct');
+  const progressFill      = document.getElementById('upcProgressFill');
+  const currentItemLbl    = document.getElementById('upcCurrentItemLabel');
+  const etaLbl            = document.getElementById('upcEtaLabel');
+  const checkedCountLbl   = document.getElementById('upcCheckedCount');
+  const totalCountLbl     = document.getElementById('upcTotalCount');
+  const stopBtn           = document.getElementById('upcStopBtn');
 
-  const modalOverlay    = document.getElementById('upcModalOverlay');
-  const modalBody       = document.getElementById('upcModalBody');
-  const modalCloseBtn   = document.getElementById('upcModalCloseBtn');
-  const modalCancelBtn  = document.getElementById('upcModalCancelBtn');
-  const modalApplyBtn   = document.getElementById('upcModalApplyBtn');
+  // Finder Stats
+  const finderStatsRow    = document.getElementById('upcFinderStatsRow');
+  const statTotal         = document.getElementById('upcStatTotal');
+  const statFound         = document.getElementById('upcStatFound');
+  const statReview        = document.getElementById('upcStatReview');
+  const statNotFound      = document.getElementById('upcStatNotFound');
 
-  // ── 1. Download Sample Excel Template ───────────────────────────────────────
-  templateBtn.addEventListener('click', async () => {
-    try {
-      const wb = new ExcelJS.Workbook();
-      wb.creator = 'BlazeTools';
-      const ws = wb.addWorksheet('UPC_Lookup_Template');
+  // Validator Stats
+  const validatorStatsRow = document.getElementById('upcValidatorStatsRow');
+  const valStatTotal      = document.getElementById('valStatTotal');
+  const valStatValid      = document.getElementById('valStatValid');
+  const valStatMismatch   = document.getElementById('valStatMismatch');
+  const valStatNotFound   = document.getElementById('valStatNotFound');
+  const valStatInvalid    = document.getElementById('valStatInvalid');
 
-      ws.columns = [
-        { header: 'Item No', key: 'itemNo', width: 18 },
-        { header: 'Brand', key: 'brand', width: 18 },
-        { header: 'Product Type', key: 'type', width: 22 },
-        { header: 'Description', key: 'desc', width: 38 },
-        { header: 'Ref Link', key: 'refLink', width: 45 },
-      ];
+  // Results & Table
+  const resultsSection    = document.getElementById('upcResultsSection');
+  const tableBadge        = document.getElementById('upcTableBadge');
+  const tableHead         = document.getElementById('upcTableHead');
+  const tableBody         = document.getElementById('upcTableBody');
+  const tableSearch       = document.getElementById('upcTableSearch');
+  const exportXlsxBtn     = document.getElementById('upcExportXlsxBtn');
+  const exportReviewBtn   = document.getElementById('upcExportReviewBtn');
+  const exportMismatchBtn = document.getElementById('upcExportMismatchBtn');
+  const exportCsvBtn      = document.getElementById('upcExportCsvBtn');
 
-      // Style Header
-      const headerRow = ws.getRow(1);
-      headerRow.height = 28;
-      headerRow.eachCell((cell) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FF1E293B' },
-        };
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      });
+  // Finder Filter Pills
+  const finderFilterPills = document.getElementById('upcFinderFilterPills');
+  const pillAll           = document.getElementById('pillAll');
+  const pillVerified      = document.getElementById('pillVerified');
+  const pillReview        = document.getElementById('pillReview');
+  const pillNotFound      = document.getElementById('pillNotFound');
+  const cntPillAll        = document.getElementById('cntPillAll');
+  const cntPillVerified   = document.getElementById('cntPillVerified');
+  const cntPillReview     = document.getElementById('cntPillReview');
+  const cntPillNotFound   = document.getElementById('cntPillNotFound');
 
-      // Add Sample Rows
-      ws.addRow({
-        itemNo: '12000000133',
-        brand: 'Pepsi',
-        type: 'Beverage',
-        desc: 'Pepsi Cola 12 fl oz Can',
-        refLink: 'https://www.pepsico.com',
-      });
-      ws.addRow({
-        itemNo: '049000028904',
-        brand: 'Coca-Cola',
-        type: 'Beverage',
-        desc: 'Coca-Cola Classic 12 fl oz Can',
-        refLink: 'https://www.coca-cola.com',
-      });
-      ws.addRow({
-        itemNo: 'DWE6423K',
-        brand: 'DEWALT',
-        type: 'Power Tools',
-        desc: '5 in. Random Orbit Sander Kit',
-        refLink: 'https://www.dewalt.com/product/dwe6423k',
-      });
+  // Validator Filter Pills
+  const validatorFilterPills = document.getElementById('upcValidatorFilterPills');
+  const pillValAll        = document.getElementById('pillValAll');
+  const pillValValid      = document.getElementById('pillValValid');
+  const pillValMismatch   = document.getElementById('pillValMismatch');
+  const pillValNotFound   = document.getElementById('pillValNotFound');
+  const pillValInvalid    = document.getElementById('pillValInvalid');
+  const cntValAll         = document.getElementById('cntValAll');
+  const cntValValid       = document.getElementById('cntValValid');
+  const cntValMismatch    = document.getElementById('cntValMismatch');
+  const cntValNotFound    = document.getElementById('cntValNotFound');
+  const cntValInvalid     = document.getElementById('cntValInvalid');
 
-      const buf = await wb.xlsx.writeBuffer();
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(blob, 'UPC_Finder_Template.xlsx');
-      showToast('Sample Excel template downloaded!', 'success');
-    } catch (err) {
-      showToast('Error generating template: ' + err.message, 'error');
-    }
-  });
+  // Modal
+  const modalOverlay      = document.getElementById('upcModalOverlay');
+  const modalBody         = document.getElementById('upcModalBody');
+  const modalCloseBtn     = document.getElementById('upcModalCloseBtn');
+  const modalCancelBtn    = document.getElementById('upcModalCancelBtn');
+  const modalApplyBtn     = document.getElementById('upcModalApplyBtn');
 
-  // ── 2. Single Item Quick Test ───────────────────────────────────────────────
-  manualToggleBtn.addEventListener('click', () => {
-    const isHidden = manualBox.style.display === 'none';
-    manualBox.style.display = isHidden ? 'block' : 'none';
-    manualToggleBtn.classList.toggle('active', isHidden);
-  });
+  // ── Mode Switching ─────────────────────────────────────────────────────────
+  if (btnModeFinder) btnModeFinder.addEventListener('click', () => switchUpcMode('finder'));
+  if (btnModeValidator) btnModeValidator.addEventListener('click', () => switchUpcMode('validator'));
 
-  singleSearchBtn.addEventListener('click', async () => {
-    const itemNo = document.getElementById('upcSingleItemNo').value.trim();
-    const brand = document.getElementById('upcSingleBrand').value.trim();
-    const productType = document.getElementById('upcSingleType').value.trim();
-    const description = document.getElementById('upcSingleDesc').value.trim();
-    const refLink = document.getElementById('upcSingleRefLink').value.trim();
-
-    if (!itemNo && !brand && !description && !refLink) {
-      showToast('Please enter an Item No, Brand, or Ref Link to test', 'error');
+  function switchUpcMode(mode) {
+    if (isScanning) {
+      showToast('Please wait for current scan to complete or stop it first', 'warn');
       return;
     }
+    currentMode = mode;
+    currentFilter = 'all';
+    searchQuery = '';
+    if (tableSearch) tableSearch.value = '';
 
-    singleSearchBtn.disabled = true;
-    singleSearchBtn.innerHTML = '<span class="spinner"></span> Searching...';
-    singleResultDiv.style.display = 'flex';
-    singleResultDiv.innerHTML = '<span style="color:var(--text3);"><i class="fas fa-spinner fa-spin"></i> Checking Mfg &amp; Distributors...</span>';
+    if (btnModeFinder) btnModeFinder.classList.toggle('active', mode === 'finder');
+    if (btnModeValidator) btnModeValidator.classList.toggle('active', mode === 'validator');
 
-    try {
-      const resp = await fetch('/api/upc/lookup-single', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemNo, brand, productType, description, refLink }),
-      });
-      const data = await resp.json();
+    if (mode === 'finder') {
+      if (cardTitle) cardTitle.textContent = 'UPC / Barcode Finder';
+      if (cardSub) cardSub.textContent = 'Data Specialist Tool · Automated lookup across Manufacturer sites & Distributors (Excludes Amazon & eBay) · Consensus validation & conflict flagging';
+      if (modeBadgeNotice) modeBadgeNotice.innerHTML = '<i class="fas fa-shield-halved" style="color:var(--accent2)"></i> Amazon & eBay Excluded (Direct & Clean Sources Only)';
+      
+      if (singleBoxTitle) singleBoxTitle.textContent = 'Quick Single Part Test';
+      if (singleValidateWrap) singleValidateWrap.style.display = 'none';
+      if (singleTypeWrap) singleTypeWrap.style.display = 'block';
+      if (singleRefLinkWrap) singleRefLinkWrap.style.display = 'block';
+      if (singleSearchBtn) singleSearchBtn.innerHTML = '<i class="fas fa-search"></i> Check UPC Now';
 
-      if (!resp.ok) throw new Error(data.error || 'Lookup failed');
+      if (uploadLabel) uploadLabel.textContent = 'Upload Product Data Sheet (Excel / CSV)';
+      if (uploadHeading) uploadHeading.textContent = 'Drop your Excel or CSV file here, or click to browse';
+      if (uploadSub) uploadSub.textContent = 'Columns supported: Item No, Product Type, Description, Brand, Mfg Reference Link';
 
-      let badgeHtml = '';
-      if (data.statusType === 'verified') {
-        badgeHtml = `<span class="badge-verified"><i class="fas fa-circle-check"></i> ${escHtml(data.status)}</span>`;
-      } else if (data.statusType === 'review') {
-        badgeHtml = `<span class="badge-review"><i class="fas fa-triangle-exclamation"></i> ${escHtml(data.status)}</span>`;
-      } else if (data.statusType === 'found') {
-        badgeHtml = `<span class="badge-found"><i class="fas fa-check"></i> ${escHtml(data.status)}</span>`;
-      } else {
-        badgeHtml = `<span class="badge-notfound"><i class="fas fa-circle-xmark"></i> Not Found</span>`;
-      }
+      if (colMapValUpcWrap) colMapValUpcWrap.style.display = 'none';
+      if (colMapTypeWrap) colMapTypeWrap.style.display = 'flex';
+      if (colMapRefLinkWrap) colMapRefLinkWrap.style.display = 'flex';
+      if (startBtn) startBtn.innerHTML = '<i class="fas fa-barcode"></i> Start Finding UPCs';
+      if (startSubText) startSubText.textContent = 'Prioritizes Manufacturer URLs → Distributors · Checksum validated';
 
-      let upcDisplay = data.upc ? `
-        <span class="upc-code-wrap">
-          <i class="fas fa-barcode"></i> ${escHtml(data.upc)}
-          <button class="upc-copy-btn" onclick="navigator.clipboard.writeText('${data.upc}');showToast('UPC copied!','success');" title="Copy"><i class="fas fa-copy"></i></button>
-        </span>
-      ` : '<span style="color:var(--text3);">No UPC found</span>';
+      if (finderStatsRow) finderStatsRow.style.display = 'grid';
+      if (validatorStatsRow) validatorStatsRow.style.display = 'none';
+      if (finderFilterPills) finderFilterPills.style.display = 'flex';
+      if (validatorFilterPills) validatorFilterPills.style.display = 'none';
 
-      let sourceDisplay = data.sourceLink ? `
-        <a class="upc-source-pill" href="${escAttr(data.sourceLink)}" target="_blank" title="${escAttr(data.sourceLink)}">
-          <i class="fas fa-arrow-up-right-from-square"></i> ${escHtml(data.sourceName || 'Source')}
-        </a>
-      ` : '';
+      if (exportReviewBtn) exportReviewBtn.style.display = 'inline-flex';
+      if (exportMismatchBtn) exportMismatchBtn.style.display = 'none';
+      if (progressTitle) progressTitle.textContent = 'Lookup Progress';
+    } else {
+      if (cardTitle) cardTitle.textContent = 'UPC / Barcode Validator';
+      if (cardSub) cardSub.textContent = 'UPC & Item Validation · Check 12-digit length & checksum algorithmically + Query upcitemdb.com specs to verify Part # match & flag mismatches';
+      if (modeBadgeNotice) modeBadgeNotice.innerHTML = '<i class="fas fa-database" style="color:#38bdf8"></i> Powered by upcitemdb.com database & algorithmic checksum checks';
 
-      singleResultDiv.innerHTML = `
-        ${badgeHtml}
-        ${upcDisplay}
-        ${sourceDisplay}
-        <span style="font-size:0.75rem; color:var(--text3);">${escHtml(data.reviewNotes || '')}</span>
-      `;
-    } catch (err) {
-      singleResultDiv.innerHTML = `<span style="color:var(--red);"><i class="fas fa-circle-exmark"></i> ${escHtml(err.message)}</span>`;
-    } finally {
-      singleSearchBtn.disabled = false;
-      singleSearchBtn.innerHTML = '<i class="fas fa-search"></i> Check UPC Now';
+      if (singleBoxTitle) singleBoxTitle.textContent = 'Quick UPC Validation Test';
+      if (singleValidateWrap) singleValidateWrap.style.display = 'block';
+      if (singleTypeWrap) singleTypeWrap.style.display = 'none';
+      if (singleRefLinkWrap) singleRefLinkWrap.style.display = 'none';
+      if (singleSearchBtn) singleSearchBtn.innerHTML = '<i class="fas fa-shield-halved"></i> Validate UPC Now';
+
+      if (uploadLabel) uploadLabel.textContent = 'Upload Products with UPCs for Validation (Excel / CSV)';
+      if (uploadHeading) uploadHeading.textContent = 'Drop your Excel or CSV file here, or click to browse';
+      if (uploadSub) uploadSub.textContent = 'Columns supported: UPC / Barcode * (12 digits), Item No / Part # *, Brand, Description';
+
+      if (colMapValUpcWrap) colMapValUpcWrap.style.display = 'flex';
+      if (colMapTypeWrap) colMapTypeWrap.style.display = 'none';
+      if (colMapRefLinkWrap) colMapRefLinkWrap.style.display = 'none';
+      if (startBtn) startBtn.innerHTML = '<i class="fas fa-shield-halved"></i> Start Validating UPCs';
+      if (startSubText) startSubText.textContent = 'Validates 12-digit UPC checksums & queries upcitemdb.com';
+
+      if (finderStatsRow) finderStatsRow.style.display = 'none';
+      if (validatorStatsRow) validatorStatsRow.style.display = 'grid';
+      if (finderFilterPills) finderFilterPills.style.display = 'none';
+      if (validatorFilterPills) validatorFilterPills.style.display = 'flex';
+
+      if (exportReviewBtn) exportReviewBtn.style.display = 'none';
+      if (exportMismatchBtn) exportMismatchBtn.style.display = 'inline-flex';
+      if (progressTitle) progressTitle.textContent = 'Validation Progress';
     }
-  });
+
+    if (rawFileRows.length > 0) {
+      setupColumnMapping(currentFile ? currentFile.name : 'File', rawFileRows.length);
+    }
+    renderTableHeaders();
+    renderWorkingTable();
+  }
+
+  // ── Render Headers Based On Mode ───────────────────────────────────────────
+  function renderTableHeaders() {
+    if (!tableHead) return;
+    if (currentMode === 'finder') {
+      tableHead.innerHTML = `
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>Item / Part #</th>
+          <th>Brand</th>
+          <th>Product Type</th>
+          <th>Description</th>
+          <th>Found UPC</th>
+          <th>Status</th>
+          <th>Source Type</th>
+          <th>Source Link</th>
+          <th>Review Notes / Conflict Info</th>
+          <th style="width:80px; text-align:center;">Action</th>
+        </tr>
+      `;
+    } else {
+      tableHead.innerHTML = `
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>Item / Part #</th>
+          <th>Input UPC</th>
+          <th>Validation Status</th>
+          <th>Match Details / Reason</th>
+          <th>DB Product Title</th>
+          <th>DB Model #</th>
+          <th>DB Brand</th>
+          <th style="width:110px; text-align:center;">Database Link</th>
+        </tr>
+      `;
+    }
+  }
+
+  // ── 1. Download Sample Excel Template ───────────────────────────────────────
+  if (templateBtn) {
+    templateBtn.addEventListener('click', async () => {
+      try {
+        const wb = new ExcelJS.Workbook();
+        wb.creator = 'BlazeTools';
+        const isVal = currentMode === 'validator';
+        const sheetName = isVal ? 'UPC_Validation_Template' : 'UPC_Lookup_Template';
+        const ws = wb.addWorksheet(sheetName);
+
+        if (isVal) {
+          ws.columns = [
+            { header: 'Item No', key: 'itemNo', width: 20 },
+            { header: 'UPC', key: 'upc', width: 18 },
+            { header: 'Brand', key: 'brand', width: 18 },
+            { header: 'Description', key: 'desc', width: 40 },
+          ];
+
+          ws.addRow({
+            itemNo: 'TLC-3-12',
+            upc: '095247144624',
+            brand: 'Diversitech',
+            desc: 'Diversitech Compressor Repair Kit 12 Gauge Kit TLC-3-12',
+          });
+          ws.addRow({
+            itemNo: '10CS05422C',
+            upc: '697666848994',
+            brand: 'Goulds',
+            desc: 'Goulds Water Technology CS Series Pump',
+          });
+          ws.addRow({
+            itemNo: 'WRONG-PART-99',
+            upc: '095247144624',
+            brand: 'Diversitech',
+            desc: 'Sample item with incorrect mismatched UPC',
+          });
+        } else {
+          ws.columns = [
+            { header: 'Item No', key: 'itemNo', width: 18 },
+            { header: 'Brand', key: 'brand', width: 18 },
+            { header: 'Product Type', key: 'type', width: 22 },
+            { header: 'Description', key: 'desc', width: 38 },
+            { header: 'Ref Link', key: 'refLink', width: 45 },
+          ];
+
+          ws.addRow({
+            itemNo: '12000000133',
+            brand: 'Pepsi',
+            type: 'Beverage',
+            desc: 'Pepsi Cola 12 fl oz Can',
+            refLink: 'https://www.pepsico.com',
+          });
+          ws.addRow({
+            itemNo: '049000028904',
+            brand: 'Coca-Cola',
+            type: 'Beverage',
+            desc: 'Coca-Cola Classic 12 fl oz Can',
+            refLink: 'https://www.coca-cola.com',
+          });
+          ws.addRow({
+            itemNo: 'DWE6423K',
+            brand: 'DEWALT',
+            type: 'Power Tools',
+            desc: '5 in. Random Orbit Sander Kit',
+            refLink: 'https://www.dewalt.com/product/dwe6423k',
+          });
+        }
+
+        // Style Header
+        const headerRow = ws.getRow(1);
+        headerRow.height = 28;
+        headerRow.eachCell((cell) => {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF1E293B' },
+          };
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
+
+        // Ensure UPC column formatted as Text
+        if (isVal) {
+          ws.getColumn('upc').numFmt = '@';
+        }
+
+        const buf = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const fname = isVal ? 'UPC_Validation_Template.xlsx' : 'UPC_Finder_Template.xlsx';
+        saveAs(blob, fname);
+        showToast(`Sample ${isVal ? 'Validation' : 'Finder'} Excel template downloaded!`, 'success');
+      } catch (err) {
+        showToast('Error generating template: ' + err.message, 'error');
+      }
+    });
+  }
+
+  // ── 2. Single Item Quick Test ───────────────────────────────────────────────
+  if (manualToggleBtn && manualBox) {
+    manualToggleBtn.addEventListener('click', () => {
+      const isHidden = manualBox.style.display === 'none';
+      manualBox.style.display = isHidden ? 'block' : 'none';
+      manualToggleBtn.classList.toggle('active', isHidden);
+    });
+  }
+
+  if (singleSearchBtn) {
+    singleSearchBtn.addEventListener('click', async () => {
+      if (currentMode === 'validator') {
+        // Validation Test
+        const upc = singleUpcCode ? singleUpcCode.value.trim() : '';
+        const itemNo = singleItemNo ? singleItemNo.value.trim() : '';
+        const brand = singleBrand ? singleBrand.value.trim() : '';
+        const description = singleDesc ? singleDesc.value.trim() : '';
+
+        if (!upc) {
+          showToast('Please enter a UPC Code (12 digits) to validate', 'error');
+          return;
+        }
+
+        singleSearchBtn.disabled = true;
+        singleSearchBtn.innerHTML = '<span class="spinner"></span> Validating...';
+        singleResultDiv.style.display = 'flex';
+        singleResultDiv.innerHTML = '<span style="color:var(--text3);"><i class="fas fa-spinner fa-spin"></i> Checking upcitemdb.com database...</span>';
+
+        try {
+          const resp = await fetch('/api/upc/validate-single', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ upc, itemNo, brand, description })
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.error || 'Validation failed');
+
+          let badgeHtml = '';
+          if (data.status === 'VALID') {
+            badgeHtml = `<span class="badge-valid"><i class="fas fa-circle-check"></i> Valid Match</span>`;
+          } else if (data.status === 'MISMATCH') {
+            badgeHtml = `<span class="badge-mismatch"><i class="fas fa-circle-xmark"></i> Mismatch</span>`;
+          } else if (data.status === 'NOT_FOUND_IN_DB') {
+            badgeHtml = `<span class="badge-notfound"><i class="fas fa-circle-question"></i> Not In DB</span>`;
+          } else {
+            badgeHtml = `<span class="badge-invalid"><i class="fas fa-ban"></i> ${escHtml(data.status)}</span>`;
+          }
+
+          let linkHtml = data.cleanUpc ? `
+            <a class="upc-source-pill" href="https://www.upcitemdb.com/upc/${data.cleanUpc}" target="_blank" rel="noopener">
+              <i class="fas fa-arrow-up-right-from-square"></i> upcitemdb
+            </a>
+          ` : '';
+
+          singleResultDiv.innerHTML = `
+            ${badgeHtml}
+            <span style="font-size:0.8rem; font-weight:600; color:var(--text);">${escHtml(data.message || '')}</span>
+            ${data.dbTitle ? `<span style="font-size:0.75rem; color:var(--text3);">Title: "${escHtml(trunc(data.dbTitle, 40))}"</span>` : ''}
+            ${linkHtml}
+          `;
+        } catch (err) {
+          singleResultDiv.innerHTML = `<span style="color:var(--red);"><i class="fas fa-circle-exmark"></i> ${escHtml(err.message)}</span>`;
+        } finally {
+          singleSearchBtn.disabled = false;
+          singleSearchBtn.innerHTML = '<i class="fas fa-shield-halved"></i> Validate UPC Now';
+        }
+
+      } else {
+        // Finder Test
+        const itemNo = singleItemNo ? singleItemNo.value.trim() : '';
+        const brand = singleBrand ? singleBrand.value.trim() : '';
+        const productType = singleType ? singleType.value.trim() : '';
+        const description = singleDesc ? singleDesc.value.trim() : '';
+        const refLink = singleRefLink ? singleRefLink.value.trim() : '';
+
+        if (!itemNo && !brand && !description && !refLink) {
+          showToast('Please enter an Item No, Brand, or Ref Link to test', 'error');
+          return;
+        }
+
+        singleSearchBtn.disabled = true;
+        singleSearchBtn.innerHTML = '<span class="spinner"></span> Searching...';
+        singleResultDiv.style.display = 'flex';
+        singleResultDiv.innerHTML = '<span style="color:var(--text3);"><i class="fas fa-spinner fa-spin"></i> Checking Mfg &amp; Distributors...</span>';
+
+        try {
+          const resp = await fetch('/api/upc/lookup-single', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itemNo, brand, productType, description, refLink }),
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.error || 'Lookup failed');
+
+          let badgeHtml = '';
+          if (data.statusType === 'verified') {
+            badgeHtml = `<span class="badge-verified"><i class="fas fa-circle-check"></i> ${escHtml(data.status)}</span>`;
+          } else if (data.statusType === 'review') {
+            badgeHtml = `<span class="badge-review"><i class="fas fa-triangle-exclamation"></i> ${escHtml(data.status)}</span>`;
+          } else if (data.statusType === 'found') {
+            badgeHtml = `<span class="badge-found"><i class="fas fa-check"></i> ${escHtml(data.status)}</span>`;
+          } else {
+            badgeHtml = `<span class="badge-notfound"><i class="fas fa-circle-xmark"></i> Not Found</span>`;
+          }
+
+          let upcDisplay = data.upc ? `
+            <span class="upc-code-wrap">
+              <i class="fas fa-barcode"></i> ${escHtml(data.upc)}
+              <button class="upc-copy-btn" onclick="navigator.clipboard.writeText('${data.upc}');showToast('UPC copied!','success');" title="Copy"><i class="fas fa-copy"></i></button>
+            </span>
+          ` : '<span style="color:var(--text3);">No UPC found</span>';
+
+          let sourceDisplay = data.sourceLink ? `
+            <a class="upc-source-pill" href="${escAttr(data.sourceLink)}" target="_blank" title="${escAttr(data.sourceLink)}">
+              <i class="fas fa-arrow-up-right-from-square"></i> ${escHtml(data.sourceName || 'Source')}
+            </a>
+          ` : '';
+
+          singleResultDiv.innerHTML = `
+            ${badgeHtml}
+            ${upcDisplay}
+            ${sourceDisplay}
+            <span style="font-size:0.75rem; color:var(--text3);">${escHtml(data.reviewNotes || '')}</span>
+          `;
+        } catch (err) {
+          singleResultDiv.innerHTML = `<span style="color:var(--red);"><i class="fas fa-circle-exmark"></i> ${escHtml(err.message)}</span>`;
+        } finally {
+          singleSearchBtn.disabled = false;
+          singleSearchBtn.innerHTML = '<i class="fas fa-search"></i> Check UPC Now';
+        }
+      }
+    });
+  }
 
   // ── 3. File Upload & Column Auto-Detection ──────────────────────────────────
-  uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
-  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
-  uploadZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    uploadZone.classList.remove('drag-over');
-    if (e.dataTransfer.files?.length) handleUploadedFile(e.dataTransfer.files[0]);
-  });
-  fileInput.addEventListener('change', (e) => {
-    if (e.target.files?.length) handleUploadedFile(e.target.files[0]);
-  });
+  if (uploadZone) {
+    uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files?.length) handleUploadedFile(e.dataTransfer.files[0]);
+    });
+  }
+  if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files?.length) handleUploadedFile(e.target.files[0]);
+    });
+  }
 
-  changeFileBtn.addEventListener('click', () => {
-    currentFile = null;
-    rawFileRows = [];
-    fileColumns = [];
-    fileInput.value = '';
-    configBox.style.display = 'none';
-    uploadZoneWrap.style.display = 'block';
-  });
+  if (changeFileBtn) {
+    changeFileBtn.addEventListener('click', () => {
+      currentFile = null;
+      rawFileRows = [];
+      fileColumns = [];
+      if (fileInput) fileInput.value = '';
+      if (configBox) configBox.style.display = 'none';
+      if (uploadZoneWrap) uploadZoneWrap.style.display = 'block';
+    });
+  }
 
   async function handleUploadedFile(file) {
     currentFile = file;
@@ -3519,7 +3874,6 @@ dlBtn.addEventListener('click',async function(){
           error: (err) => showToast('CSV Parse Error: ' + err.message, 'error'),
         });
       } else {
-        // Excel file
         const ab = await file.arrayBuffer();
         const wb = new ExcelJS.Workbook();
         await wb.xlsx.load(ab);
@@ -3530,7 +3884,7 @@ dlBtn.addEventListener('click',async function(){
         let headers = [];
 
         ws.eachRow((row, rowNumber) => {
-          const values = row.values.slice(1); // ExcelJS values are 1-indexed
+          const values = row.values.slice(1);
           if (rowNumber === 1) {
             headers = values.map(v => String(v || '').trim());
           } else {
@@ -3538,7 +3892,6 @@ dlBtn.addEventListener('click',async function(){
             headers.forEach((h, idx) => {
               rowObj[h] = values[idx] !== undefined ? String(values[idx]).trim() : '';
             });
-            // Skip completely empty rows
             if (Object.values(rowObj).some(Boolean)) {
               rows.push(rowObj);
             }
@@ -3560,13 +3913,13 @@ dlBtn.addEventListener('click',async function(){
   }
 
   function setupColumnMapping(fileName, count) {
-    fileNameBadge.innerHTML = `<i class="fas fa-file-excel"></i> ${escHtml(fileName)}`;
-    rowCountBadge.textContent = `${count} items ready`;
+    if (fileNameBadge) fileNameBadge.innerHTML = `<i class="fas fa-file-excel"></i> ${escHtml(fileName)}`;
+    if (rowCountBadge) rowCountBadge.textContent = `${count} items ready`;
 
-    uploadZoneWrap.style.display = 'none';
-    configBox.style.display = 'block';
+    if (uploadZoneWrap) uploadZoneWrap.style.display = 'none';
+    if (configBox) configBox.style.display = 'block';
 
-    const selects = [mapItemNo, mapBrand, mapType, mapDesc, mapRefLink];
+    const selects = [mapValUpc, mapItemNo, mapBrand, mapType, mapDesc, mapRefLink].filter(Boolean);
     selects.forEach(sel => {
       sel.innerHTML = '<option value="">-- None / Skip --</option>';
       fileColumns.forEach(col => {
@@ -3577,17 +3930,19 @@ dlBtn.addEventListener('click',async function(){
       });
     });
 
-    // Smart auto-detection heuristics
-    autoSelectColumn(mapItemNo, [/item.*no/i, /part.*no/i, /part.*#/i, /item.*#/i, /^part$/i, /^item$/i, /sku/i, /model/i, /code/i]);
-    autoSelectColumn(mapBrand, [/brand/i, /mfg/i, /manufacturer/i, /make/i]);
-    autoSelectColumn(mapType, [/product.*type/i, /type/i, /category/i, /subcat/i, /class/i]);
-    autoSelectColumn(mapDesc, [/desc/i, /description/i, /product.*name/i, /title/i, /item.*name/i]);
-    autoSelectColumn(mapRefLink, [/ref.*link/i, /mfg.*link/i, /url/i, /link/i, /website/i, /site/i]);
+    // Auto-detection heuristics
+    if (mapValUpc) autoSelectColumn(mapValUpc, [/upc/i, /barcode/i, /gtin/i, /ean/i, /^code$/i]);
+    if (mapItemNo) autoSelectColumn(mapItemNo, [/item.*no/i, /part.*no/i, /part.*#/i, /item.*#/i, /^part$/i, /^item$/i, /sku/i, /model/i]);
+    if (mapBrand) autoSelectColumn(mapBrand, [/brand/i, /mfg/i, /manufacturer/i, /make/i]);
+    if (mapType) autoSelectColumn(mapType, [/product.*type/i, /type/i, /category/i, /subcat/i, /class/i]);
+    if (mapDesc) autoSelectColumn(mapDesc, [/desc/i, /description/i, /product.*name/i, /title/i, /item.*name/i]);
+    if (mapRefLink) autoSelectColumn(mapRefLink, [/ref.*link/i, /mfg.*link/i, /url/i, /link/i, /website/i, /site/i]);
 
     showToast(`Loaded ${count} rows! Verify column mappings and click Start`, 'info');
   }
 
   function autoSelectColumn(selectEl, patterns) {
+    if (!selectEl) return;
     for (const pattern of patterns) {
       for (const col of fileColumns) {
         if (pattern.test(col)) {
@@ -3599,25 +3954,35 @@ dlBtn.addEventListener('click',async function(){
   }
 
   // ── 4. Batch Scanning Execution ─────────────────────────────────────────────
-  startBtn.addEventListener('click', () => {
-    if (isScanning) return;
-    if (!rawFileRows.length) {
-      showToast('Please upload a file first', 'error');
-      return;
-    }
+  if (startBtn) {
+    startBtn.addEventListener('click', () => {
+      if (isScanning) return;
+      if (!rawFileRows.length) {
+        showToast('Please upload a file first', 'error');
+        return;
+      }
 
-    const colItemNo = mapItemNo.value;
-    const colBrand = mapBrand.value;
-    const colType = mapType.value;
-    const colDesc = mapDesc.value;
-    const colRef = mapRefLink.value;
+      if (currentMode === 'validator') {
+        startValidatorBatch();
+      } else {
+        startFinderBatch();
+      }
+    });
+  }
+
+  // --- Finder Batch ---
+  function startFinderBatch() {
+    const colItemNo = mapItemNo ? mapItemNo.value : '';
+    const colBrand = mapBrand ? mapBrand.value : '';
+    const colType = mapType ? mapType.value : '';
+    const colDesc = mapDesc ? mapDesc.value : '';
+    const colRef = mapRefLink ? mapRefLink.value : '';
 
     if (!colItemNo && !colDesc && !colBrand) {
       showToast('Please map at least Item No or Description/Brand', 'error');
       return;
     }
 
-    // Normalize rows into items array
     const items = rawFileRows.map((r, idx) => ({
       id: idx,
       itemNo: (colItemNo ? r[colItemNo] : '') || '',
@@ -3627,8 +3992,7 @@ dlBtn.addEventListener('click',async function(){
       refLink: (colRef ? r[colRef] : '') || '',
     }));
 
-    // Initialize state
-    upcResults = items.map((it, idx) => ({
+    finderResults = items.map((it, idx) => ({
       ...it,
       upc: '',
       status: 'In Queue',
@@ -3642,27 +4006,26 @@ dlBtn.addEventListener('click',async function(){
       alternatives: [],
     }));
 
-    // Setup UI
     isScanning = true;
     startBtn.disabled = true;
     startBtn.innerHTML = '<span class="spinner"></span> Finding UPCs...';
-    progressSection.style.display = 'block';
-    resultsSection.style.display = 'block';
+    if (progressSection) progressSection.style.display = 'block';
+    if (resultsSection) resultsSection.style.display = 'block';
 
-    statTotal.textContent = items.length;
-    statFound.textContent = '0';
-    statReview.textContent = '0';
-    statNotFound.textContent = '0';
-    progressPct.textContent = '0%';
-    progressFill.style.width = '0%';
-    checkedCountLbl.textContent = '0';
-    totalCountLbl.textContent = items.length;
-    currentItemLbl.textContent = 'Connecting...';
-    etaLbl.textContent = 'calculating...';
+    if (statTotal) statTotal.textContent = items.length;
+    if (statFound) statFound.textContent = '0';
+    if (statReview) statReview.textContent = '0';
+    if (statNotFound) statNotFound.textContent = '0';
+    if (progressPct) progressPct.textContent = '0%';
+    if (progressFill) progressFill.style.width = '0%';
+    if (checkedCountLbl) checkedCountLbl.textContent = '0';
+    if (totalCountLbl) totalCountLbl.textContent = items.length;
+    if (currentItemLbl) currentItemLbl.textContent = 'Connecting...';
+    if (etaLbl) etaLbl.textContent = 'calculating...';
 
+    renderTableHeaders();
     renderWorkingTable();
 
-    // Connect Socket.io
     if (upcSocket?.connected) upcSocket.disconnect();
     upcSocket = io({ reconnection: false });
 
@@ -3672,26 +4035,26 @@ dlBtn.addEventListener('click',async function(){
 
     upcSocket.on('upcProgress', (d) => {
       const pct = Math.round(d.percent || 0);
-      progressFill.style.width = pct + '%';
-      progressPct.textContent = pct + '%';
-      checkedCountLbl.textContent = d.checked;
-      totalCountLbl.textContent = d.total;
-      statFound.textContent = d.foundCount;
-      statReview.textContent = d.reviewCount;
-      statNotFound.textContent = d.notFoundCount;
-      currentItemLbl.textContent = d.currentItem ? trunc(d.currentItem, 35) : 'finalizing...';
+      if (progressFill) progressFill.style.width = pct + '%';
+      if (progressPct) progressPct.textContent = pct + '%';
+      if (checkedCountLbl) checkedCountLbl.textContent = d.checked;
+      if (totalCountLbl) totalCountLbl.textContent = d.total;
+      if (statFound) statFound.textContent = d.foundCount;
+      if (statReview) statReview.textContent = d.reviewCount;
+      if (statNotFound) statNotFound.textContent = d.notFoundCount;
+      if (currentItemLbl) currentItemLbl.textContent = d.currentItem ? trunc(d.currentItem, 35) : 'finalizing...';
 
-      if (d.etaMs > 0) {
+      if (d.etaMs > 0 && etaLbl) {
         const sec = Math.ceil(d.etaMs / 1000);
         etaLbl.textContent = sec < 60 ? `~${sec}s` : `~${Math.floor(sec / 60)}m ${sec % 60}s`;
-      } else {
+      } else if (etaLbl) {
         etaLbl.textContent = 'estimating...';
       }
     });
 
     upcSocket.on('upcItemResult', (data) => {
-      if (data?.id !== undefined && upcResults[data.id]) {
-        upcResults[data.id] = { ...upcResults[data.id], ...data.result };
+      if (data?.id !== undefined && finderResults[data.id]) {
+        finderResults[data.id] = { ...finderResults[data.id], ...data.result };
         updateSingleTableRow(data.id);
         updateCounters();
       }
@@ -3701,10 +4064,10 @@ dlBtn.addEventListener('click',async function(){
       isScanning = false;
       startBtn.disabled = false;
       startBtn.innerHTML = '<i class="fas fa-barcode"></i> Re-Scan All';
-      progressFill.style.width = '100%';
-      progressPct.textContent = '100%';
-      currentItemLbl.textContent = '✅ Lookup Complete';
-      etaLbl.textContent = 'Done';
+      if (progressFill) progressFill.style.width = '100%';
+      if (progressPct) progressPct.textContent = '100%';
+      if (currentItemLbl) currentItemLbl.textContent = '✅ Lookup Complete';
+      if (etaLbl) etaLbl.textContent = 'Done';
       updateCounters();
       renderWorkingTable();
       showToast(`UPC Lookup complete! Found: ${final.foundCount}, Need Review: ${final.reviewCount}, Not Found: ${final.notFoundCount}`, 'success', 6000);
@@ -3714,8 +4077,8 @@ dlBtn.addEventListener('click',async function(){
       isScanning = false;
       startBtn.disabled = false;
       startBtn.innerHTML = '<i class="fas fa-play"></i> Resume Scan';
-      currentItemLbl.textContent = '⏹ Stopped by user';
-      etaLbl.textContent = '—';
+      if (currentItemLbl) currentItemLbl.textContent = '⏹ Stopped by user';
+      if (etaLbl) etaLbl.textContent = '—';
       updateCounters();
       renderWorkingTable();
       showToast('UPC scan stopped', 'warn');
@@ -3727,52 +4090,204 @@ dlBtn.addEventListener('click',async function(){
       startBtn.innerHTML = '<i class="fas fa-barcode"></i> Start Finding UPCs';
       showToast('UPC lookup error: ' + (err.message || err), 'error');
     });
-  });
+  }
 
-  stopBtn.addEventListener('click', () => {
-    if (upcSocket?.connected) upcSocket.emit('stopUpcBatch');
-    isScanning = false;
-    startBtn.disabled = false;
-    startBtn.innerHTML = '<i class="fas fa-play"></i> Resume Scan';
-    currentItemLbl.textContent = '⏹ Stopped';
-    etaLbl.textContent = '—';
-    showToast('Stopping UPC lookup...', 'warn');
-  });
+  // --- Validator Batch ---
+  function startValidatorBatch() {
+    const colUpc = mapValUpc ? mapValUpc.value : '';
+    const colItemNo = mapItemNo ? mapItemNo.value : '';
+    const colBrand = mapBrand ? mapBrand.value : '';
+    const colDesc = mapDesc ? mapDesc.value : '';
+
+    if (!colUpc) {
+      showToast('Please map the UPC / Barcode column to validate', 'error');
+      return;
+    }
+
+    const items = rawFileRows.map((r, idx) => ({
+      id: idx,
+      upc: (colUpc ? r[colUpc] : '') || '',
+      itemNo: (colItemNo ? r[colItemNo] : '') || '',
+      brand: (colBrand ? r[colBrand] : '') || '',
+      description: (colDesc ? r[colDesc] : '') || '',
+      rawRow: r
+    }));
+
+    validatorResults = items.map((it, idx) => ({
+      ...it,
+      status: 'In Queue',
+      isValid: false,
+      message: 'Waiting to validate...',
+      dbTitle: '',
+      dbBrand: '',
+      dbModel: '',
+      url: ''
+    }));
+
+    isScanning = true;
+    startBtn.disabled = true;
+    startBtn.innerHTML = '<span class="spinner"></span> Validating UPCs...';
+    if (progressSection) progressSection.style.display = 'block';
+    if (resultsSection) resultsSection.style.display = 'block';
+
+    if (valStatTotal) valStatTotal.textContent = items.length;
+    if (valStatValid) valStatValid.textContent = '0';
+    if (valStatMismatch) valStatMismatch.textContent = '0';
+    if (valStatNotFound) valStatNotFound.textContent = '0';
+    if (valStatInvalid) valStatInvalid.textContent = '0';
+    if (progressPct) progressPct.textContent = '0%';
+    if (progressFill) progressFill.style.width = '0%';
+    if (checkedCountLbl) checkedCountLbl.textContent = '0';
+    if (totalCountLbl) totalCountLbl.textContent = items.length;
+    if (currentItemLbl) currentItemLbl.textContent = 'Connecting...';
+    if (etaLbl) etaLbl.textContent = 'calculating...';
+
+    renderTableHeaders();
+    renderWorkingTable();
+
+    if (upcSocket?.connected) upcSocket.disconnect();
+    upcSocket = io({ reconnection: false });
+
+    upcSocket.on('connect', () => {
+      upcSocket.emit('startUpcValBatch', { items });
+    });
+
+    upcSocket.on('upcValProgress', (d) => {
+      const pct = Math.round(d.percent || 0);
+      if (progressFill) progressFill.style.width = pct + '%';
+      if (progressPct) progressPct.textContent = pct + '%';
+      if (checkedCountLbl) checkedCountLbl.textContent = d.checked;
+      if (totalCountLbl) totalCountLbl.textContent = d.total;
+      if (valStatValid) valStatValid.textContent = d.validCount;
+      if (valStatMismatch) valStatMismatch.textContent = d.mismatchCount;
+      if (valStatNotFound) valStatNotFound.textContent = d.notFoundCount;
+      if (valStatInvalid) valStatInvalid.textContent = d.invalidCount;
+      if (currentItemLbl) currentItemLbl.textContent = d.currentItem ? trunc(d.currentItem, 35) : 'validating...';
+
+      if (d.etaMs > 0 && etaLbl) {
+        const sec = Math.ceil(d.etaMs / 1000);
+        etaLbl.textContent = sec < 60 ? `~${sec}s` : `~${Math.floor(sec / 60)}m ${sec % 60}s`;
+      } else if (etaLbl) {
+        etaLbl.textContent = 'estimating...';
+      }
+    });
+
+    upcSocket.on('upcValItemResult', (data) => {
+      if (data?.id !== undefined && validatorResults[data.id]) {
+        validatorResults[data.id] = { ...validatorResults[data.id], ...data.result };
+        updateSingleTableRow(data.id);
+        updateCounters();
+      }
+    });
+
+    upcSocket.on('upcValBatchComplete', (final) => {
+      isScanning = false;
+      startBtn.disabled = false;
+      startBtn.innerHTML = '<i class="fas fa-shield-halved"></i> Re-Validate All';
+      if (progressFill) progressFill.style.width = '100%';
+      if (progressPct) progressPct.textContent = '100%';
+      if (currentItemLbl) currentItemLbl.textContent = '✅ Validation Complete';
+      if (etaLbl) etaLbl.textContent = 'Done';
+      updateCounters();
+      renderWorkingTable();
+      showToast(`Validation complete! Valid: ${final.validCount}, Mismatches: ${final.mismatchCount}, Not in DB: ${final.notFoundCount}, Invalid: ${final.invalidCount}`, 'success', 7000);
+    });
+
+    upcSocket.on('upcValBatchCancelled', (data) => {
+      isScanning = false;
+      startBtn.disabled = false;
+      startBtn.innerHTML = '<i class="fas fa-play"></i> Resume Validation';
+      if (currentItemLbl) currentItemLbl.textContent = '⏹ Stopped by user';
+      if (etaLbl) etaLbl.textContent = '—';
+      updateCounters();
+      renderWorkingTable();
+      showToast('UPC validation stopped', 'warn');
+    });
+
+    upcSocket.on('upcValError', (err) => {
+      isScanning = false;
+      startBtn.disabled = false;
+      startBtn.innerHTML = '<i class="fas fa-shield-halved"></i> Start Validating UPCs';
+      showToast('Validation error: ' + (err.message || err), 'error');
+    });
+  }
+
+  // --- Stop Button ---
+  if (stopBtn) {
+    stopBtn.addEventListener('click', () => {
+      if (upcSocket?.connected) {
+        if (currentMode === 'validator') upcSocket.emit('stopUpcValBatch');
+        else upcSocket.emit('stopUpcBatch');
+      }
+      isScanning = false;
+      startBtn.disabled = false;
+      startBtn.innerHTML = '<i class="fas fa-play"></i> Resume';
+      if (currentItemLbl) currentItemLbl.textContent = '⏹ Stopped';
+      if (etaLbl) etaLbl.textContent = '—';
+      showToast('Stopping scan...', 'warn');
+    });
+  }
 
   // ── 5. Table Rendering & Live Updates ───────────────────────────────────────
   function updateCounters() {
-    let verifiedCount = 0;
-    let reviewCount = 0;
-    let notFoundCount = 0;
+    if (currentMode === 'finder') {
+      let verifiedCount = 0, reviewCount = 0, notFoundCount = 0;
+      finderResults.forEach(r => {
+        if (r.statusType === 'verified' || r.statusType === 'found') verifiedCount++;
+        else if (r.statusType === 'review') reviewCount++;
+        else if (r.statusType === 'not_found') notFoundCount++;
+      });
+      if (cntPillAll) cntPillAll.textContent = finderResults.length;
+      if (cntPillVerified) cntPillVerified.textContent = verifiedCount;
+      if (cntPillReview) cntPillReview.textContent = reviewCount;
+      if (cntPillNotFound) cntPillNotFound.textContent = notFoundCount;
+      if (tableBadge) tableBadge.textContent = `${finderResults.length} records`;
 
-    upcResults.forEach(r => {
-      if (r.statusType === 'verified' || r.statusType === 'found') verifiedCount++;
-      else if (r.statusType === 'review') reviewCount++;
-      else if (r.statusType === 'not_found') notFoundCount++;
-    });
+      if (statFound) statFound.textContent = verifiedCount;
+      if (statReview) statReview.textContent = reviewCount;
+      if (statNotFound) statNotFound.textContent = notFoundCount;
+    } else {
+      let validCount = 0, mismatchCount = 0, notFoundCount = 0, invalidCount = 0;
+      validatorResults.forEach(r => {
+        if (r.status === 'VALID') validCount++;
+        else if (r.status === 'MISMATCH') mismatchCount++;
+        else if (r.status === 'NOT_FOUND_IN_DB') notFoundCount++;
+        else if (r.status === 'INVALID_CHECKSUM' || r.status === 'INVALID_LENGTH' || r.status === 'EMPTY' || r.status === 'LOOKUP_ERROR') invalidCount++;
+      });
+      if (cntValAll) cntValAll.textContent = validatorResults.length;
+      if (cntValValid) cntValValid.textContent = validCount;
+      if (cntValMismatch) cntValMismatch.textContent = mismatchCount;
+      if (cntValNotFound) cntValNotFound.textContent = notFoundCount;
+      if (cntValInvalid) cntValInvalid.textContent = invalidCount;
+      if (tableBadge) tableBadge.textContent = `${validatorResults.length} records`;
 
-    cntPillAll.textContent = upcResults.length;
-    cntPillVerified.textContent = verifiedCount;
-    cntPillReview.textContent = reviewCount;
-    cntPillNotFound.textContent = notFoundCount;
-    tableBadge.textContent = `${upcResults.length} records`;
-
-    statFound.textContent = verifiedCount;
-    statReview.textContent = reviewCount;
-    statNotFound.textContent = notFoundCount;
+      if (valStatValid) valStatValid.textContent = validCount;
+      if (valStatMismatch) valStatMismatch.textContent = mismatchCount;
+      if (valStatNotFound) valStatNotFound.textContent = notFoundCount;
+      if (valStatInvalid) valStatInvalid.textContent = invalidCount;
+    }
   }
 
   function getFilteredResults() {
-    return upcResults.filter((r, idx) => {
-      // Filter pill check
-      if (currentFilter === 'verified' && r.statusType !== 'verified' && r.statusType !== 'found') return false;
-      if (currentFilter === 'review' && r.statusType !== 'review') return false;
-      if (currentFilter === 'not_found' && r.statusType !== 'not_found') return false;
-
-      // Search query check
-      if (searchQuery) {
-        const text = `${r.itemNo} ${r.brand} ${r.productType} ${r.description} ${r.upc} ${r.status} ${r.reviewNotes}`.toLowerCase();
-        if (!text.includes(searchQuery)) return false;
+    const list = currentMode === 'finder' ? finderResults : validatorResults;
+    return list.filter((r) => {
+      if (currentMode === 'finder') {
+        if (currentFilter === 'verified' && r.statusType !== 'verified' && r.statusType !== 'found') return false;
+        if (currentFilter === 'review' && r.statusType !== 'review') return false;
+        if (currentFilter === 'not_found' && r.statusType !== 'not_found') return false;
+        if (searchQuery) {
+          const text = `${r.itemNo} ${r.brand} ${r.productType} ${r.description} ${r.upc} ${r.status} ${r.reviewNotes}`.toLowerCase();
+          if (!text.includes(searchQuery)) return false;
+        }
+      } else {
+        if (currentFilter === 'valid' && r.status !== 'VALID') return false;
+        if (currentFilter === 'mismatch' && r.status !== 'MISMATCH') return false;
+        if (currentFilter === 'not_found' && r.status !== 'NOT_FOUND_IN_DB') return false;
+        if (currentFilter === 'invalid' && !['INVALID_CHECKSUM', 'INVALID_LENGTH', 'EMPTY', 'LOOKUP_ERROR'].includes(r.status)) return false;
+        if (searchQuery) {
+          const text = `${r.itemNo} ${r.brand} ${r.upc} ${r.cleanUpc} ${r.status} ${r.message} ${r.dbTitle} ${r.dbModel}`.toLowerCase();
+          if (!text.includes(searchQuery)) return false;
+        }
       }
       return true;
     });
@@ -3782,44 +4297,36 @@ dlBtn.addEventListener('click',async function(){
     updateCounters();
     const filtered = getFilteredResults();
 
+    if (!tableBody) return;
     if (!filtered.length) {
-      tableBody.innerHTML = `<tr><td colspan="11" class="empty-state"><i class="fas fa-barcode"></i>No records matching current filter.</td></tr>`;
+      const colCount = currentMode === 'finder' ? 11 : 9;
+      tableBody.innerHTML = `<tr><td colspan="${colCount}" class="empty-state"><i class="fas fa-barcode"></i>No records matching current filter.</td></tr>`;
       return;
     }
 
     let html = '';
+    const fullList = currentMode === 'finder' ? finderResults : validatorResults;
     filtered.forEach((r) => {
-      const originalIdx = r.id !== undefined ? r.id : upcResults.indexOf(r);
-      html += renderRowHtml(r, originalIdx);
+      const originalIdx = r.id !== undefined ? r.id : fullList.indexOf(r);
+      html += currentMode === 'finder' ? renderFinderRowHtml(r, originalIdx) : renderValidatorRowHtml(r, originalIdx);
     });
     tableBody.innerHTML = html;
   }
 
   function updateSingleTableRow(idx) {
     const rowEl = document.getElementById(`upc-row-${idx}`);
-    if (rowEl) {
-      const r = upcResults[idx];
-      // Check if current row matches filter
-      let visible = true;
-      if (currentFilter === 'verified' && r.statusType !== 'verified' && r.statusType !== 'found') visible = false;
-      if (currentFilter === 'review' && r.statusType !== 'review') visible = false;
-      if (currentFilter === 'not_found' && r.statusType !== 'not_found') visible = false;
-      if (searchQuery) {
-        const text = `${r.itemNo} ${r.brand} ${r.productType} ${r.description} ${r.upc} ${r.status} ${r.reviewNotes}`.toLowerCase();
-        if (!text.includes(searchQuery)) visible = false;
-      }
+    const fullList = currentMode === 'finder' ? finderResults : validatorResults;
+    const r = fullList[idx];
+    if (!r) return;
 
-      if (visible) {
-        rowEl.outerHTML = renderRowHtml(r, idx);
-      } else {
-        rowEl.style.display = 'none';
-      }
+    if (rowEl) {
+      rowEl.outerHTML = currentMode === 'finder' ? renderFinderRowHtml(r, idx) : renderValidatorRowHtml(r, idx);
     } else {
       renderWorkingTable();
     }
   }
 
-  function renderRowHtml(r, idx) {
+  function renderFinderRowHtml(r, idx) {
     let badgeHtml = '';
     if (r.statusType === 'verified') {
       badgeHtml = `<span class="badge-verified"><i class="fas fa-circle-check"></i> ${escHtml(r.status)}</span>`;
@@ -3833,35 +4340,22 @@ dlBtn.addEventListener('click',async function(){
       badgeHtml = `<span class="badge-notfound"><i class="fas fa-circle-xmark"></i> Not Found</span>`;
     }
 
-    let upcCell = '';
-    if (r.upc) {
-      upcCell = `
-        <div class="upc-code-wrap">
-          <span>${escHtml(r.upc)}</span>
-          <button class="upc-copy-btn" onclick="navigator.clipboard.writeText('${r.upc}');showToast('UPC copied: ${r.upc}','success');" title="Copy UPC"><i class="fas fa-copy"></i></button>
-        </div>
-      `;
-    } else {
-      upcCell = `<span style="color:var(--text3)">—</span>`;
-    }
+    let upcCell = r.upc ? `
+      <div class="upc-code-wrap">
+        <span>${escHtml(r.upc)}</span>
+        <button class="upc-copy-btn" onclick="navigator.clipboard.writeText('${r.upc}');showToast('UPC copied: ${r.upc}','success');" title="Copy UPC"><i class="fas fa-copy"></i></button>
+      </div>
+    ` : `<span style="color:var(--text3)">—</span>`;
 
-    let sourceCell = '';
-    if (r.sourceLink) {
-      sourceCell = `
-        <a class="upc-source-pill" href="${escAttr(r.sourceLink)}" target="_blank" rel="noopener" title="${escAttr(r.sourceLink)}">
-          <i class="fas fa-arrow-up-right-from-square"></i> ${escHtml(r.sourceName || 'Source')}
-        </a>
-      `;
-    } else {
-      sourceCell = `<span style="color:var(--text3)">—</span>`;
-    }
+    let sourceCell = r.sourceLink ? `
+      <a class="upc-source-pill" href="${escAttr(r.sourceLink)}" target="_blank" rel="noopener" title="${escAttr(r.sourceLink)}">
+        <i class="fas fa-arrow-up-right-from-square"></i> ${escHtml(r.sourceName || 'Source')}
+      </a>
+    ` : `<span style="color:var(--text3)">—</span>`;
 
-    let notesCell = '';
-    if (r.statusType === 'review') {
-      notesCell = `<span style="color:#eab308; cursor:pointer;" onclick="window.openUpcReviewModal(${idx})"><i class="fas fa-code-compare"></i> ${escHtml(trunc(r.reviewNotes, 60))} <u>Details</u></span>`;
-    } else {
-      notesCell = `<span style="font-size:0.75rem; color:var(--text3);">${escHtml(trunc(r.reviewNotes || '—', 65))}</span>`;
-    }
+    let notesCell = r.statusType === 'review'
+      ? `<span style="color:#eab308; cursor:pointer;" onclick="window.openUpcReviewModal(${idx})"><i class="fas fa-code-compare"></i> ${escHtml(trunc(r.reviewNotes, 60))} <u>Details</u></span>`
+      : `<span style="font-size:0.75rem; color:var(--text3);">${escHtml(trunc(r.reviewNotes || '—', 65))}</span>`;
 
     return `
       <tr id="upc-row-${idx}">
@@ -3884,24 +4378,82 @@ dlBtn.addEventListener('click',async function(){
     `;
   }
 
+  function renderValidatorRowHtml(r, idx) {
+    let badgeHtml = '';
+    if (r.status === 'VALID') {
+      badgeHtml = `<span class="badge-valid"><i class="fas fa-circle-check"></i> Valid Match</span>`;
+    } else if (r.status === 'MISMATCH') {
+      badgeHtml = `<span class="badge-mismatch"><i class="fas fa-circle-xmark"></i> Mismatch</span>`;
+    } else if (r.status === 'NOT_FOUND_IN_DB') {
+      badgeHtml = `<span class="badge-notfound"><i class="fas fa-circle-question"></i> Not In DB</span>`;
+    } else if (r.status === 'In Queue') {
+      badgeHtml = `<span class="badge-notfound"><i class="fas fa-spinner fa-spin"></i> In Queue</span>`;
+    } else {
+      badgeHtml = `<span class="badge-invalid"><i class="fas fa-ban"></i> ${escHtml(r.status || 'Invalid')}</span>`;
+    }
+
+    let upcCell = r.upc ? `
+      <div class="upc-code-wrap">
+        <span>${escHtml(r.upc)}</span>
+        <button class="upc-copy-btn" onclick="navigator.clipboard.writeText('${r.upc}');showToast('UPC copied!','success');" title="Copy"><i class="fas fa-copy"></i></button>
+      </div>
+    ` : `<span style="color:var(--text3)">—</span>`;
+
+    let cleanDigits = (r.cleanUpc || r.upc || '').replace(/\D/g, '');
+    let linkCell = cleanDigits ? `
+      <a class="upc-source-pill" href="https://www.upcitemdb.com/upc/${cleanDigits}" target="_blank" rel="noopener">
+        <i class="fas fa-arrow-up-right-from-square"></i> upcitemdb
+      </a>
+    ` : `<span style="color:var(--text3)">—</span>`;
+
+    return `
+      <tr id="upc-row-${idx}">
+        <td style="color:var(--text3); font-size:0.72rem;">${idx + 1}</td>
+        <td><span class="item-no-tag">${escHtml(r.itemNo || '—')}</span></td>
+        <td>${upcCell}</td>
+        <td>${badgeHtml}</td>
+        <td title="${escAttr(r.message || '')}"><span style="font-size:0.75rem; color:${r.status === 'MISMATCH' ? '#f87171' : 'var(--text2)'}">${escHtml(trunc(r.message || '—', 55))}</span></td>
+        <td title="${escAttr(r.dbTitle || '')}">${escHtml(trunc(r.dbTitle || '—', 40))}</td>
+        <td style="font-family:'Courier New',monospace; font-weight:600;">${escHtml(r.dbModel || '—')}</td>
+        <td style="font-weight:600;">${escHtml(r.dbBrand || '—')}</td>
+        <td style="text-align:center;">${linkCell}</td>
+      </tr>
+    `;
+  }
+
   // ── Filters & Search ────────────────────────────────────────────────────────
-  [pillAll, pillVerified, pillReview, pillNotFound].forEach(pill => {
-    pill.addEventListener('click', () => {
-      document.querySelectorAll('#upcFilterPills .filter-pill').forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      currentFilter = pill.dataset.filter;
+  if (finderFilterPills) {
+    finderFilterPills.querySelectorAll('.filter-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        finderFilterPills.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        currentFilter = pill.dataset.filter;
+        renderWorkingTable();
+      });
+    });
+  }
+
+  if (validatorFilterPills) {
+    validatorFilterPills.querySelectorAll('.filter-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        validatorFilterPills.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        currentFilter = pill.dataset.valfilter;
+        renderWorkingTable();
+      });
+    });
+  }
+
+  if (tableSearch) {
+    tableSearch.addEventListener('input', (e) => {
+      searchQuery = e.target.value.trim().toLowerCase();
       renderWorkingTable();
     });
-  });
+  }
 
-  tableSearch.addEventListener('input', (e) => {
-    searchQuery = e.target.value.trim().toLowerCase();
-    renderWorkingTable();
-  });
-
-  // ── 6. Conflict Review Modal & Manual Overrides ──────────────────────────────
+  // ── 6. Conflict Review Modal & Manual Overrides (Finder Mode) ───────────────
   window.openUpcReviewModal = function(idx) {
-    const item = upcResults[idx];
+    const item = finderResults[idx];
     if (!item) return;
     activeModalIdx = idx;
     modalSelectedUpc = item.upc;
@@ -3938,31 +4490,33 @@ dlBtn.addEventListener('click',async function(){
       `;
     }
 
-    modalBody.innerHTML = `
-      <div style="background:rgba(234,179,8,0.08); border:1px solid rgba(234,179,8,0.25); border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem;">
-        <div style="font-weight:700; color:#eab308; font-size:0.85rem; margin-bottom:0.25rem;">
-          <i class="fas fa-triangle-exclamation"></i> Multiple UPC candidates detected for this item
+    if (modalBody) {
+      modalBody.innerHTML = `
+        <div style="background:rgba(234,179,8,0.08); border:1px solid rgba(234,179,8,0.25); border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem;">
+          <div style="font-weight:700; color:#eab308; font-size:0.85rem; margin-bottom:0.25rem;">
+            <i class="fas fa-triangle-exclamation"></i> Multiple UPC candidates detected for this item
+          </div>
+          <div style="font-size:0.78rem; color:var(--text2);">
+            BlazeTools analyzed the consensus and pre-selected the most common UPC. As a data specialist, you can verify or select the correct one below.
+          </div>
         </div>
-        <div style="font-size:0.78rem; color:var(--text2);">
-          BlazeTools analyzed the consensus and pre-selected the most common UPC. As a data specialist, you can verify or select the correct one below.
+
+        <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.5rem; font-size:0.8rem; background:var(--surface3); padding:0.75rem; border-radius:7px;">
+          <div><b>Item No:</b> ${escHtml(item.itemNo || '—')}</div>
+          <div><b>Brand:</b> ${escHtml(item.brand || '—')}</div>
+          <div style="grid-column:span 2;"><b>Description:</b> ${escHtml(item.description || '—')}</div>
         </div>
-      </div>
 
-      <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.5rem; font-size:0.8rem; background:var(--surface3); padding:0.75rem; border-radius:7px;">
-        <div><b>Item No:</b> ${escHtml(item.itemNo || '—')}</div>
-        <div><b>Brand:</b> ${escHtml(item.brand || '—')}</div>
-        <div style="grid-column:span 2;"><b>Description:</b> ${escHtml(item.description || '—')}</div>
-      </div>
+        ${altsHtml}
 
-      ${altsHtml}
+        <div style="margin-top:1rem;">
+          <label class="field-label" style="margin-bottom:0.3rem;">Or Enter / Override Custom UPC:</label>
+          <input type="text" id="modalCustomUpc" value="${escAttr(item.upc)}" style="width:100%; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:0.5rem 0.75rem; color:var(--text); font-family:'Courier New',monospace; font-size:0.9rem;" placeholder="e.g. 012000000133">
+        </div>
+      `;
+    }
 
-      <div style="margin-top:1rem;">
-        <label class="field-label" style="margin-bottom:0.3rem;">Or Enter / Override Custom UPC:</label>
-        <input type="text" id="modalCustomUpc" value="${escAttr(item.upc)}" style="width:100%; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:0.5rem 0.75rem; color:var(--text); font-family:'Courier New',monospace; font-size:0.9rem;" placeholder="e.g. 012000000133">
-      </div>
-    `;
-
-    modalOverlay.classList.add('open');
+    if (modalOverlay) modalOverlay.classList.add('open');
   };
 
   window.setModalChoice = function(val) {
@@ -3972,7 +4526,7 @@ dlBtn.addEventListener('click',async function(){
   };
 
   window.manualEditUpc = function(idx) {
-    const item = upcResults[idx];
+    const item = finderResults[idx];
     const current = item.upc || '';
     const newUpc = prompt(`Enter verified UPC for Item "${item.itemNo || item.description}":`, current);
     if (newUpc !== null && newUpc.trim() !== '') {
@@ -3988,138 +4542,240 @@ dlBtn.addEventListener('click',async function(){
     }
   };
 
-  modalCloseBtn.addEventListener('click', () => modalOverlay.classList.remove('open'));
-  modalCancelBtn.addEventListener('click', () => modalOverlay.classList.remove('open'));
-  modalApplyBtn.addEventListener('click', () => {
-    if (activeModalIdx === null) return;
-    const customInp = document.getElementById('modalCustomUpc');
-    const finalUpc = customInp ? customInp.value.trim() : modalSelectedUpc;
+  if (modalCloseBtn) modalCloseBtn.addEventListener('click', () => modalOverlay && modalOverlay.classList.remove('open'));
+  if (modalCancelBtn) modalCancelBtn.addEventListener('click', () => modalOverlay && modalOverlay.classList.remove('open'));
+  if (modalApplyBtn) {
+    modalApplyBtn.addEventListener('click', () => {
+      if (activeModalIdx === null) return;
+      const customInp = document.getElementById('modalCustomUpc');
+      const finalUpc = customInp ? customInp.value.trim() : modalSelectedUpc;
 
-    if (finalUpc) {
-      const cleanDigits = finalUpc.replace(/[^0-9]/g, '');
-      const finalVal = (cleanDigits.length >= 11 && cleanDigits.length <= 14) ? cleanDigits : finalUpc.trim();
-      const item = upcResults[activeModalIdx];
-      item.upc = finalVal;
-      item.status = 'Verified (Reviewed)';
-      item.statusType = 'verified';
-      item.reviewNotes = `Specialist resolved conflict. Selected UPC: ${finalVal}`;
-      updateSingleTableRow(activeModalIdx);
-      updateCounters();
-      showToast(`Saved selection for row #${activeModalIdx + 1}!`, 'success');
-    }
-    modalOverlay.classList.remove('open');
-  });
+      if (finalUpc) {
+        const cleanDigits = finalUpc.replace(/[^0-9]/g, '');
+        const finalVal = (cleanDigits.length >= 11 && cleanDigits.length <= 14) ? cleanDigits : finalUpc.trim();
+        const item = finderResults[activeModalIdx];
+        item.upc = finalVal;
+        item.status = 'Verified (Reviewed)';
+        item.statusType = 'verified';
+        item.reviewNotes = `Specialist resolved conflict. Selected UPC: ${finalVal}`;
+        updateSingleTableRow(activeModalIdx);
+        updateCounters();
+        showToast(`Saved selection for row #${activeModalIdx + 1}!`, 'success');
+      }
+      if (modalOverlay) modalOverlay.classList.remove('open');
+    });
+  }
 
   // ── 7. Excel & CSV Exporting ────────────────────────────────────────────────
-  exportXlsxBtn.addEventListener('click', () => exportExcelFile(false));
-  exportReviewBtn.addEventListener('click', () => exportExcelFile(true));
+  if (exportXlsxBtn) exportXlsxBtn.addEventListener('click', () => exportExcelFile(false));
+  if (exportReviewBtn) exportReviewBtn.addEventListener('click', () => exportExcelFile(true));
+  if (exportMismatchBtn) exportMismatchBtn.addEventListener('click', () => exportExcelFile(true));
 
-  async function exportExcelFile(reviewOnly) {
-    const rowsToExport = reviewOnly
-      ? upcResults.filter(r => r.statusType === 'review')
-      : upcResults;
+  async function exportExcelFile(filterOnly) {
+    if (currentMode === 'finder') {
+      const rowsToExport = filterOnly
+        ? finderResults.filter(r => r.statusType === 'review')
+        : finderResults;
 
-    if (!rowsToExport.length) {
-      showToast(reviewOnly ? 'No "Need to Review" records to export!' : 'No records to export!', 'info');
-      return;
-    }
+      if (!rowsToExport.length) {
+        showToast(filterOnly ? 'No "Need to Review" records to export!' : 'No records to export!', 'info');
+        return;
+      }
 
-    try {
-      const wb = new ExcelJS.Workbook();
-      wb.creator = 'BlazeTools UPC Finder';
-      const sheetName = reviewOnly ? 'Need_Review_UPC' : 'UPC_Results';
-      const ws = wb.addWorksheet(sheetName);
+      try {
+        const wb = new ExcelJS.Workbook();
+        wb.creator = 'BlazeTools UPC Finder';
+        const sheetName = filterOnly ? 'Need_Review_UPC' : 'UPC_Results';
+        const ws = wb.addWorksheet(sheetName);
 
-      ws.columns = [
-        { header: 'Item No', key: 'itemNo', width: 18 },
-        { header: 'Brand', key: 'brand', width: 18 },
-        { header: 'Product Type', key: 'type', width: 20 },
-        { header: 'Description', key: 'desc', width: 35 },
-        { header: 'Found UPC', key: 'upc', width: 18 },
-        { header: 'Status', key: 'status', width: 22 },
-        { header: 'Source Type', key: 'sourceType', width: 20 },
-        { header: 'Source Link', key: 'sourceLink', width: 40 },
-        { header: 'Review Notes / Alternatives', key: 'notes', width: 45 },
-      ];
+        ws.columns = [
+          { header: 'Item No', key: 'itemNo', width: 18 },
+          { header: 'Brand', key: 'brand', width: 18 },
+          { header: 'Product Type', key: 'type', width: 20 },
+          { header: 'Description', key: 'desc', width: 35 },
+          { header: 'Found UPC', key: 'upc', width: 18 },
+          { header: 'Status', key: 'status', width: 22 },
+          { header: 'Source Type', key: 'sourceType', width: 20 },
+          { header: 'Source Link', key: 'sourceLink', width: 40 },
+          { header: 'Review Notes / Alternatives', key: 'notes', width: 45 },
+        ];
 
-      // Style Header Row
-      const hdrRow = ws.getRow(1);
-      hdrRow.height = 28;
-      hdrRow.eachCell((cell) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FF0F172A' },
-        };
-        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      });
-
-      // Add Data Rows
-      rowsToExport.forEach((r) => {
-        const row = ws.addRow({
-          itemNo: r.itemNo,
-          brand: r.brand,
-          type: r.productType,
-          desc: r.description,
-          upc: r.upc,
-          status: r.status,
-          sourceType: r.sourceType,
-          sourceLink: r.sourceLink ? { text: r.sourceName || r.sourceLink, hyperlink: r.sourceLink } : '',
-          notes: r.reviewNotes,
+        const hdrRow = ws.getRow(1);
+        hdrRow.height = 28;
+        hdrRow.eachCell((cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
         });
 
-        // Color Status Cell
-        const statusCell = row.getCell('status');
-        if (r.statusType === 'verified' || r.statusType === 'found') {
-          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
-          statusCell.font = { color: { argb: 'FF15803D' }, bold: true };
-        } else if (r.statusType === 'review') {
-          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } };
-          statusCell.font = { color: { argb: 'FF854D0E' }, bold: true };
-        } else {
-          statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
-          statusCell.font = { color: { argb: 'FF475569' } };
-        }
+        rowsToExport.forEach((r) => {
+          const row = ws.addRow({
+            itemNo: r.itemNo,
+            brand: r.brand,
+            type: r.productType,
+            desc: r.description,
+            upc: r.upc,
+            status: r.status,
+            sourceType: r.sourceType,
+            sourceLink: r.sourceLink ? { text: r.sourceName || r.sourceLink, hyperlink: r.sourceLink } : '',
+            notes: r.reviewNotes,
+          });
 
-        // Format UPC Column as Text explicitly so Excel does not convert to scientific notation
-        const upcCell = row.getCell('upc');
-        upcCell.numFmt = '@';
-        upcCell.alignment = { horizontal: 'center' };
-      });
+          const statusCell = row.getCell('status');
+          if (r.statusType === 'verified' || r.statusType === 'found') {
+            statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+            statusCell.font = { color: { argb: 'FF15803D' }, bold: true };
+          } else if (r.statusType === 'review') {
+            statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } };
+            statusCell.font = { color: { argb: 'FF854D0E' }, bold: true };
+          } else {
+            statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+            statusCell.font = { color: { argb: 'FF475569' } };
+          }
 
-      const buf = await wb.xlsx.writeBuffer();
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const dt = new Date().toISOString().slice(0, 10);
-      const fname = reviewOnly ? `UPC_Review_List_${dt}.xlsx` : `UPC_Found_Report_${dt}.xlsx`;
-      saveAs(blob, fname);
-      showToast(`Exported ${rowsToExport.length} items to Excel!`, 'success');
-    } catch (err) {
-      showToast('Export failed: ' + err.message, 'error');
+          const upcCell = row.getCell('upc');
+          upcCell.numFmt = '@';
+          upcCell.alignment = { horizontal: 'center' };
+        });
+
+        const buf = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const dt = new Date().toISOString().slice(0, 10);
+        const fname = filterOnly ? `UPC_Review_List_${dt}.xlsx` : `UPC_Found_Report_${dt}.xlsx`;
+        saveAs(blob, fname);
+        showToast(`Exported ${rowsToExport.length} items to Excel!`, 'success');
+      } catch (err) {
+        showToast('Export failed: ' + err.message, 'error');
+      }
+
+    } else {
+      // Validator Export
+      const rowsToExport = filterOnly
+        ? validatorResults.filter(r => r.status !== 'VALID')
+        : validatorResults;
+
+      if (!rowsToExport.length) {
+        showToast(filterOnly ? 'No Mismatch/Invalid records to export!' : 'No records to export!', 'info');
+        return;
+      }
+
+      try {
+        const wb = new ExcelJS.Workbook();
+        wb.creator = 'BlazeTools UPC Validator';
+        const sheetName = filterOnly ? 'Mismatches_Only' : 'UPC_Validation_Results';
+        const ws = wb.addWorksheet(sheetName);
+
+        ws.columns = [
+          { header: 'Item No', key: 'itemNo', width: 20 },
+          { header: 'Input UPC', key: 'upc', width: 18 },
+          { header: 'Validation Status', key: 'status', width: 22 },
+          { header: 'Match Details / Conflict Reason', key: 'message', width: 45 },
+          { header: 'DB Product Title', key: 'dbTitle', width: 40 },
+          { header: 'DB Model #', key: 'dbModel', width: 20 },
+          { header: 'DB Brand', key: 'dbBrand', width: 20 },
+          { header: 'UPCitemdb Link', key: 'url', width: 35 },
+        ];
+
+        const hdrRow = ws.getRow(1);
+        hdrRow.height = 28;
+        hdrRow.eachCell((cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+          cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
+
+        rowsToExport.forEach((r) => {
+          const cleanDigits = (r.cleanUpc || r.upc || '').replace(/\D/g, '');
+          const dbUrl = cleanDigits ? `https://www.upcitemdb.com/upc/${cleanDigits}` : '';
+
+          const row = ws.addRow({
+            itemNo: r.itemNo,
+            upc: r.upc,
+            status: r.status,
+            message: r.message,
+            dbTitle: r.dbTitle,
+            dbModel: r.dbModel,
+            dbBrand: r.dbBrand,
+            url: dbUrl ? { text: 'upcitemdb.com', hyperlink: dbUrl } : '',
+          });
+
+          const statusCell = row.getCell('status');
+          if (r.status === 'VALID') {
+            statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+            statusCell.font = { color: { argb: 'FF15803D' }, bold: true };
+          } else if (r.status === 'MISMATCH') {
+            statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+            statusCell.font = { color: { argb: 'FFDC2626' }, bold: true };
+          } else if (r.status === 'NOT_FOUND_IN_DB') {
+            statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } };
+            statusCell.font = { color: { argb: 'FF854D0E' }, bold: true };
+          } else {
+            statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+            statusCell.font = { color: { argb: 'FF991B1B' } };
+          }
+
+          const upcCell = row.getCell('upc');
+          upcCell.numFmt = '@';
+          upcCell.alignment = { horizontal: 'center' };
+        });
+
+        const buf = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const dt = new Date().toISOString().slice(0, 10);
+        const fname = filterOnly ? `UPC_Mismatches_${dt}.xlsx` : `UPC_Validation_Report_${dt}.xlsx`;
+        saveAs(blob, fname);
+        showToast(`Exported ${rowsToExport.length} validation items to Excel!`, 'success');
+      } catch (err) {
+        showToast('Export failed: ' + err.message, 'error');
+      }
     }
   }
 
-  exportCsvBtn.addEventListener('click', () => {
-    if (!upcResults.length) {
-      showToast('No records to export!', 'info');
-      return;
-    }
-    const headers = ['Item No', 'Brand', 'Product Type', 'Description', 'Found UPC', 'Status', 'Source Type', 'Source Link', 'Review Notes'];
-    const rows = upcResults.map(r => [
-      r.itemNo, r.brand, r.productType, r.description, r.upc, r.status, r.sourceType, r.sourceLink, r.reviewNotes
-    ]);
+  if (exportCsvBtn) {
+    exportCsvBtn.addEventListener('click', () => {
+      if (currentMode === 'finder') {
+        if (!finderResults.length) {
+          showToast('No records to export!', 'info');
+          return;
+        }
+        const headers = ['Item No', 'Brand', 'Product Type', 'Description', 'Found UPC', 'Status', 'Source Type', 'Source Link', 'Review Notes'];
+        const rows = finderResults.map(r => [
+          r.itemNo, r.brand, r.productType, r.description, r.upc, r.status, r.sourceType, r.sourceLink, r.reviewNotes
+        ]);
+        const csvContent = [headers, ...rows]
+          .map(row => row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(','))
+          .join('\n');
 
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(','))
-      .join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const dt = new Date().toISOString().slice(0, 10);
+        saveAs(blob, `UPC_Found_Report_${dt}.csv`);
+        showToast('Exported CSV successfully!', 'success');
+      } else {
+        if (!validatorResults.length) {
+          showToast('No records to export!', 'info');
+          return;
+        }
+        const headers = ['Item No', 'Input UPC', 'Validation Status', 'Match Details', 'DB Product Title', 'DB Model', 'DB Brand'];
+        const rows = validatorResults.map(r => [
+          r.itemNo, r.upc, r.status, r.message, r.dbTitle, r.dbModel, r.dbBrand
+        ]);
+        const csvContent = [headers, ...rows]
+          .map(row => row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(','))
+          .join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const dt = new Date().toISOString().slice(0, 10);
-    saveAs(blob, `UPC_Found_Report_${dt}.csv`);
-    showToast('Exported CSV successfully!', 'success');
-  });
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const dt = new Date().toISOString().slice(0, 10);
+        saveAs(blob, `UPC_Validation_Report_${dt}.csv`);
+        showToast('Exported CSV successfully!', 'success');
+      }
+    });
+  }
+
+  // Initial render of headers
+  renderTableHeaders();
 
 })();
+
 
 </script>
 </body>
