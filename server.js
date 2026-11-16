@@ -7,7 +7,10 @@ const { validateUpcItem } = require('./upc-validator');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  maxHttpBufferSize: 5e7, // 50 MB buffer to handle large batch payloads
+  cors: { origin: '*' }
+});
 
 app.use(express.static('public'));
 app.use(express.json({ limit: '10mb' }));

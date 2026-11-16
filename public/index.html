@@ -4032,7 +4032,18 @@ dlBtn.addEventListener('click',async function(){
     renderWorkingTable();
 
     if (upcSocket?.connected) upcSocket.disconnect();
-    upcSocket = io({ reconnection: false });
+    upcSocket = io({
+      reconnection: false,
+      transports: ['websocket', 'polling']
+    });
+
+    upcSocket.on('connect_error', (err) => {
+      console.error('Socket connect error:', err);
+      isScanning = false;
+      startBtn.disabled = false;
+      startBtn.innerHTML = '<i class="fas fa-barcode"></i> Start Finding UPCs';
+      showToast('Connection error: ' + (err.message || 'Server connection failed'), 'error');
+    });
 
     upcSocket.on('connect', () => {
       upcSocket.emit('startUpcBatch', { items });
@@ -4114,8 +4125,7 @@ dlBtn.addEventListener('click',async function(){
       upc: (colUpc ? r[colUpc] : '') || '',
       itemNo: (colItemNo ? r[colItemNo] : '') || '',
       brand: (colBrand ? r[colBrand] : '') || '',
-      description: (colDesc ? r[colDesc] : '') || '',
-      rawRow: r
+      description: (colDesc ? r[colDesc] : '') || ''
     }));
 
     validatorResults = items.map((it, idx) => ({
@@ -4151,7 +4161,18 @@ dlBtn.addEventListener('click',async function(){
     renderWorkingTable();
 
     if (upcSocket?.connected) upcSocket.disconnect();
-    upcSocket = io({ reconnection: false });
+    upcSocket = io({
+      reconnection: false,
+      transports: ['websocket', 'polling']
+    });
+
+    upcSocket.on('connect_error', (err) => {
+      console.error('Socket connect error:', err);
+      isScanning = false;
+      startBtn.disabled = false;
+      startBtn.innerHTML = '<i class="fas fa-shield-halved"></i> Start Validating UPCs';
+      showToast('Connection error: ' + (err.message || 'Server connection failed'), 'error');
+    });
 
     upcSocket.on('connect', () => {
       upcSocket.emit('startUpcValBatch', { items });
