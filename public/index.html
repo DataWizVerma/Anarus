@@ -780,6 +780,11 @@
     <span class="ni-label">UPC Finder</span>
     <span class="ni-badge">Pro</span>
   </div>
+  <div class="nav-item" data-tool="imgfinder" id="nav-imgfinder">
+    <div class="ni-icon"><i class="fas fa-image"></i></div>
+    <span class="ni-label">Image Finder</span>
+    <span class="ni-badge" style="background:#f59e0b;color:#1a1a1a;">Beta</span>
+  </div>
 
   <div class="sidebar-footer">
     <a href="https://www.linkedin.com/in/kumar-verma2002/" target="_blank">
@@ -1413,6 +1418,147 @@
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       TOOL 6: IMAGE FINDER (BETA)
+  ══════════════════════════════════════════════════════════════════ -->
+  <div id="tool-imgfinder" class="tool-section">
+    <div class="card">
+      <div class="card-hd">
+        <div class="card-icon" style="background:linear-gradient(135deg,#f59e0b,#ef4444);box-shadow:0 4px 12px rgba(245,158,11,0.3);color:#fff;width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">
+          <i class="fas fa-image"></i>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <h2 class="card-title">Image Finder</h2>
+            <span style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;border-radius:999px;font-size:0.68rem;font-weight:700;padding:2px 10px;letter-spacing:0.03em;">BETA</span>
+          </div>
+          <p class="card-sub">Upload your catalog Excel/CSV → auto-find product images from manufacturer & distributor sites. Confidence-scored so you know what to trust.</p>
+        </div>
+      </div>
+
+      <!-- Beta Notice -->
+      <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:10px;padding:0.75rem 1rem;margin-bottom:1rem;display:flex;gap:0.6rem;align-items:flex-start;">
+        <i class="fas fa-flask" style="color:#92400e;margin-top:2px;flex-shrink:0;"></i>
+        <div style="font-size:0.8rem;color:#78350f;">
+          <strong>Beta Feature</strong> — Image search checks manufacturer pages &amp; web results, then validates image size to avoid blank/logo false-positives.
+          <strong>HIGH</strong> = image verified on exact ref link ≥8KB | <strong>MEDIUM</strong> = found on distributor site ≥3KB | <strong>LOW</strong> = found but small file — verify before use.
+        </div>
+      </div>
+
+      <!-- Single Item Test -->
+      <div class="tip" style="margin-bottom:1rem;">
+        <i class="fas fa-vial" style="color:var(--accent2)"></i>
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;flex:1;align-items:center;">
+          <input id="imgSingleItemNo" class="input" placeholder="Item No / Part #" style="max-width:160px;font-size:0.82rem;padding:0.4rem 0.75rem;" />
+          <input id="imgSingleBrand" class="input" placeholder="Brand" style="max-width:130px;font-size:0.82rem;padding:0.4rem 0.75rem;" />
+          <input id="imgSingleDesc" class="input" placeholder="Description (optional)" style="max-width:220px;font-size:0.82rem;padding:0.4rem 0.75rem;" />
+          <input id="imgSingleRef" class="input" placeholder="Ref/Mfg URL (optional)" style="max-width:230px;font-size:0.82rem;padding:0.4rem 0.75rem;" />
+          <button class="btn btn-accent btn-sm" id="imgSingleSearchBtn"><i class="fas fa-search"></i> Find Image</button>
+        </div>
+      </div>
+      <div id="imgSingleResult" style="display:none;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-bottom:1rem;padding:0.75rem 1rem;background:var(--surface2);border-radius:10px;border:1px solid var(--border);"></div>
+
+      <!-- File Upload -->
+      <div id="imgUploadZoneWrap">
+        <label class="upload-zone" id="imgUploadZone" for="imgFileInput">
+          <i class="fas fa-cloud-upload-alt" style="font-size:2rem;color:var(--accent);margin-bottom:0.5rem;"></i>
+          <div style="font-weight:600;color:var(--text);">Drop your Excel or CSV here</div>
+          <div style="font-size:0.8rem;color:var(--text3);margin-top:0.3rem;">Needs: Item No + (Brand or Ref Link). Description helps too.</div>
+          <input type="file" id="imgFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
+        </label>
+      </div>
+
+      <!-- Column Mapping + File Info -->
+      <div id="imgConfigBox" style="display:none;">
+        <div class="tip" style="margin-bottom:0.75rem;">
+          <i class="fas fa-file-excel" style="color:#22c55e"></i>
+          <span id="imgFileNameBadge" style="font-weight:600;"></span>
+          <span id="imgRowCountBadge" class="ni-badge" style="margin-left:0.4rem;"></span>
+          <button class="btn btn-ghost btn-sm" id="imgChangeFileBtn" style="margin-left:auto;"><i class="fas fa-sync"></i> Change File</button>
+        </div>
+        <p style="font-size:0.78rem;color:var(--text2);margin-bottom:0.6rem;">Map your columns below. <strong>Item No</strong> + <strong>Brand</strong> (or <strong>Ref Link</strong>) recommended for best results.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0.6rem;margin-bottom:1rem;">
+          <div>
+            <label class="map-label"><i class="fas fa-hashtag" style="color:var(--accent)"></i> Item No / Part # <span style="color:#ef4444">*</span></label>
+            <select class="input map-select" id="imgMapItemNo" style="font-size:0.82rem;"></select>
+          </div>
+          <div>
+            <label class="map-label"><i class="fas fa-tag" style="color:#8b5cf6"></i> Brand / Mfg</label>
+            <select class="input map-select" id="imgMapBrand" style="font-size:0.82rem;"></select>
+          </div>
+          <div>
+            <label class="map-label"><i class="fas fa-align-left" style="color:#f59e0b"></i> Description</label>
+            <select class="input map-select" id="imgMapDesc" style="font-size:0.82rem;"></select>
+          </div>
+          <div>
+            <label class="map-label"><i class="fas fa-link" style="color:#06b6d4"></i> Ref / Mfg URL</label>
+            <select class="input map-select" id="imgMapRef" style="font-size:0.82rem;"></select>
+          </div>
+        </div>
+        <button class="btn btn-accent" id="imgStartBtn" style="min-width:200px;"><i class="fas fa-search"></i> Start Finding Images</button>
+        <button class="btn btn-ghost btn-sm" id="imgStopBtn" style="display:none;border-color:#ef4444;color:#ef4444;"><i class="fas fa-stop-circle"></i> Stop Scan</button>
+      </div>
+
+      <!-- Stats Row -->
+      <div id="imgStatsRow" style="display:none;grid-template-columns:repeat(5,1fr);gap:0.5rem;margin-top:1rem;" class="stats-row">
+        <div class="stat-box"><div class="stat-val" id="imgStatTotal">0</div><div class="stat-lbl">Total</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:#22c55e" id="imgStatHigh">0</div><div class="stat-lbl">High ✅</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:#f59e0b" id="imgStatMed">0</div><div class="stat-lbl">Medium 🟡</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:#94a3b8" id="imgStatLow">0</div><div class="stat-lbl">Low 🔵</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:#ef4444" id="imgStatNotFound">0</div><div class="stat-lbl">Not Found ❌</div></div>
+      </div>
+
+      <!-- Progress -->
+      <div id="imgProgressSection" style="display:none;margin-top:1rem;">
+        <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:var(--text2);margin-bottom:0.3rem;">
+          <span>Image Search Progress</span><span id="imgProgressPct">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="imgProgressFill" style="width:0%"></div></div>
+        <div style="display:flex;gap:1.5rem;font-size:0.74rem;color:var(--text3);margin-top:0.3rem;flex-wrap:wrap;">
+          <span>⏳ ETA: <span id="imgEtaLbl">calculating...</span></span>
+          <span>✅ Checked: <span id="imgCheckedLbl">0</span> / <span id="imgTotalLbl">0</span></span>
+          <span>🔍 <span id="imgCurrentItem" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span></span>
+        </div>
+      </div>
+
+      <!-- Export Buttons -->
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
+        <button class="btn btn-ghost btn-sm" id="imgExportAllBtn" style="display:none;border-color:#22c55e;color:#22c55e;"><i class="fas fa-file-excel"></i> Export All (.xlsx)</button>
+        <button class="btn btn-ghost btn-sm" id="imgExportFoundBtn" style="display:none;border-color:#3b82f6;color:#3b82f6;"><i class="fas fa-check-circle"></i> Export Found Only (.xlsx)</button>
+        <button class="btn btn-ghost btn-sm" id="imgExportNotFoundBtn" style="display:none;border-color:#ef4444;color:#ef4444;"><i class="fas fa-circle-xmark"></i> Export Not Found Only (.xlsx)</button>
+      </div>
+
+      <!-- Filter Pills -->
+      <div id="imgFilterPills" style="display:none;margin-top:0.75rem;" class="filter-pills">
+        <button class="filter-pill active" data-imgfilter="all">All <span id="imgCntAll">0</span></button>
+        <button class="filter-pill" data-imgfilter="high" style="color:#22c55e;">High ✅ <span id="imgCntHigh">0</span></button>
+        <button class="filter-pill" data-imgfilter="medium" style="color:#f59e0b;">Medium 🟡 <span id="imgCntMed">0</span></button>
+        <button class="filter-pill" data-imgfilter="low" style="color:#3b82f6;">Low 🔵 <span id="imgCntLow">0</span></button>
+        <button class="filter-pill" data-imgfilter="notfound" style="color:#ef4444;">Not Found ❌ <span id="imgCntNotFound">0</span></button>
+        <input class="input" id="imgSearchFilter" placeholder="Filter by Item No, Brand..." style="margin-left:auto;max-width:220px;font-size:0.78rem;padding:0.3rem 0.6rem;" />
+      </div>
+
+      <!-- Results Table -->
+      <div id="imgResultsSection" style="display:none;margin-top:0.75rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+          <span style="font-size:0.8rem;color:var(--text2);">Working Table &amp; Results</span>
+          <span class="ni-badge" id="imgTableBadge">0 records</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="imgResultTable">
+            <thead>
+              <tr>
+                <th>#</th><th>Item No</th><th>Brand</th><th>Confidence</th>
+                <th>Image Preview</th><th>Image URL</th><th>Source</th><th>Reason / Notes</th>
+              </tr>
+            </thead>
+            <tbody id="imgTableBody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -4801,6 +4947,464 @@ dlBtn.addEventListener('click',async function(){
 
   // Initial render of headers
   renderTableHeaders();
+
+})();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TOOL 6 — IMAGE FINDER (BETA)
+// ══════════════════════════════════════════════════════════════════════════════
+(function() {
+  'use strict';
+
+  // ── DOM refs ──────────────────────────────────────────────────────────────
+  const imgFileInput      = document.getElementById('imgFileInput');
+  const imgUploadZoneWrap = document.getElementById('imgUploadZoneWrap');
+  const imgConfigBox      = document.getElementById('imgConfigBox');
+  const imgFileNameBadge  = document.getElementById('imgFileNameBadge');
+  const imgRowCountBadge  = document.getElementById('imgRowCountBadge');
+  const imgChangeFileBtn  = document.getElementById('imgChangeFileBtn');
+  const imgMapItemNo      = document.getElementById('imgMapItemNo');
+  const imgMapBrand       = document.getElementById('imgMapBrand');
+  const imgMapDesc        = document.getElementById('imgMapDesc');
+  const imgMapRef         = document.getElementById('imgMapRef');
+  const imgStartBtn       = document.getElementById('imgStartBtn');
+  const imgStopBtn        = document.getElementById('imgStopBtn');
+  const imgStatsRow       = document.getElementById('imgStatsRow');
+  const imgProgressSection= document.getElementById('imgProgressSection');
+  const imgProgressFill   = document.getElementById('imgProgressFill');
+  const imgProgressPct    = document.getElementById('imgProgressPct');
+  const imgEtaLbl         = document.getElementById('imgEtaLbl');
+  const imgCheckedLbl     = document.getElementById('imgCheckedLbl');
+  const imgTotalLbl       = document.getElementById('imgTotalLbl');
+  const imgCurrentItem    = document.getElementById('imgCurrentItem');
+  const imgResultsSection = document.getElementById('imgResultsSection');
+  const imgTableBody      = document.getElementById('imgTableBody');
+  const imgTableBadge     = document.getElementById('imgTableBadge');
+  const imgFilterPills    = document.getElementById('imgFilterPills');
+  const imgSearchFilter   = document.getElementById('imgSearchFilter');
+  const imgExportAllBtn   = document.getElementById('imgExportAllBtn');
+  const imgExportFoundBtn = document.getElementById('imgExportFoundBtn');
+  const imgExportNotFoundBtn = document.getElementById('imgExportNotFoundBtn');
+  const imgStatTotal      = document.getElementById('imgStatTotal');
+  const imgStatHigh       = document.getElementById('imgStatHigh');
+  const imgStatMed        = document.getElementById('imgStatMed');
+  const imgStatLow        = document.getElementById('imgStatLow');
+  const imgStatNotFound   = document.getElementById('imgStatNotFound');
+  const imgCntAll         = document.getElementById('imgCntAll');
+  const imgCntHigh        = document.getElementById('imgCntHigh');
+  const imgCntMed         = document.getElementById('imgCntMed');
+  const imgCntLow         = document.getElementById('imgCntLow');
+  const imgCntNotFound    = document.getElementById('imgCntNotFound');
+  const imgSingleSearchBtn= document.getElementById('imgSingleSearchBtn');
+  const imgSingleResult   = document.getElementById('imgSingleResult');
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let imgRawRows = [];
+  let imgColumns = [];
+  let imgResults = [];
+  let imgCurrentFilter = 'all';
+  let imgSocket = null;
+  let imgIsScanning = false;
+
+  // ── File Upload ───────────────────────────────────────────────────────────
+  const imgUploadZone = document.getElementById('imgUploadZone');
+  if (imgUploadZone) {
+    imgUploadZone.addEventListener('dragover', e => { e.preventDefault(); imgUploadZone.classList.add('dragover'); });
+    imgUploadZone.addEventListener('dragleave', () => imgUploadZone.classList.remove('dragover'));
+    imgUploadZone.addEventListener('drop', e => {
+      e.preventDefault(); imgUploadZone.classList.remove('dragover');
+      const f = e.dataTransfer.files[0];
+      if (f) handleImgFile(f);
+    });
+    imgUploadZone.addEventListener('click', () => imgFileInput && imgFileInput.click());
+    if (imgFileInput) imgFileInput.addEventListener('change', e => { if (e.target.files[0]) handleImgFile(e.target.files[0]); });
+  }
+
+  async function handleImgFile(file) {
+    try {
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.csv')) {
+        Papa.parse(file, {
+          header: true, skipEmptyLines: true,
+          complete(res) {
+            imgColumns = res.meta.fields || [];
+            imgRawRows = res.data;
+            setupImgMapping(file.name, imgRawRows.length);
+          },
+          error(err) { showToast('CSV Parse Error: ' + err.message, 'error'); }
+        });
+      } else {
+        const ab = await file.arrayBuffer();
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(ab);
+        const ws = wb.worksheets[0];
+        if (!ws) throw new Error('No worksheets found');
+        const rows = [], headers = [];
+        ws.eachRow((row, rn) => {
+          const vals = row.values.slice(1);
+          if (rn === 1) { vals.forEach(v => headers.push(String(v || '').trim())); }
+          else {
+            const obj = {};
+            headers.forEach((h, i) => { obj[h] = vals[i] !== undefined ? String(vals[i]).trim() : ''; });
+            if (Object.values(obj).some(Boolean)) rows.push(obj);
+          }
+        });
+        if (!rows.length) { showToast('No data rows found', 'error'); return; }
+        imgColumns = headers.filter(Boolean);
+        imgRawRows = rows;
+        setupImgMapping(file.name, imgRawRows.length);
+      }
+    } catch (err) { showToast('Failed to read file: ' + err.message, 'error'); }
+  }
+
+  function setupImgMapping(fileName, count) {
+    if (imgFileNameBadge) imgFileNameBadge.innerHTML = `<i class="fas fa-file-excel"></i> ${escHtml(fileName)}`;
+    if (imgRowCountBadge) imgRowCountBadge.textContent = `${count} items ready`;
+    if (imgUploadZoneWrap) imgUploadZoneWrap.style.display = 'none';
+    if (imgConfigBox) imgConfigBox.style.display = 'block';
+
+    const makeOpts = (placeholder, autoKeys) => {
+      let html = `<option value="">— ${placeholder} —</option>`;
+      imgColumns.forEach(col => {
+        const sel = autoKeys.some(k => col.toLowerCase().includes(k));
+        html += `<option value="${escAttr(col)}"${sel ? ' selected' : ''}>${escHtml(col)}</option>`;
+      });
+      return html;
+    };
+    if (imgMapItemNo) imgMapItemNo.innerHTML = makeOpts('Select column', ['item no', 'item#', 'part no', 'part#', 'sku', 'model']);
+    if (imgMapBrand)  imgMapBrand.innerHTML  = makeOpts('Select column', ['brand', 'manufacturer', 'mfg']);
+    if (imgMapDesc)   imgMapDesc.innerHTML   = makeOpts('Select column', ['description', 'desc']);
+    if (imgMapRef)    imgMapRef.innerHTML    = makeOpts('Select column', ['ref', 'link', 'url', 'mfg url', 'manufacturer url']);
+  }
+
+  if (imgChangeFileBtn) {
+    imgChangeFileBtn.addEventListener('click', () => {
+      imgRawRows = []; imgColumns = [];
+      if (imgFileInput) imgFileInput.value = '';
+      if (imgConfigBox) imgConfigBox.style.display = 'none';
+      if (imgUploadZoneWrap) imgUploadZoneWrap.style.display = 'block';
+    });
+  }
+
+  // ── Confidence Badge HTML ─────────────────────────────────────────────────
+  function confBadge(r) {
+    if (r.confidence === 'HIGH')   return `<span class="badge-valid"><i class="fas fa-circle-check"></i> High</span>`;
+    if (r.confidence === 'MEDIUM') return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:0.72rem;font-weight:700;background:#fef3c7;color:#92400e;border:1px solid #fde68a;"><i class="fas fa-circle-half-stroke"></i> Medium</span>`;
+    if (r.confidence === 'LOW')    return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:0.72rem;font-weight:700;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;"><i class="fas fa-circle-info"></i> Low</span>`;
+    return `<span class="badge-mismatch"><i class="fas fa-circle-xmark"></i> Not Found</span>`;
+  }
+
+  // ── Render single row ─────────────────────────────────────────────────────
+  function renderImgRow(r, idx) {
+    const imgPreview = r.imageUrl
+      ? `<a href="${escAttr(r.imageUrl)}" target="_blank" rel="noopener">
+           <img src="/api/proxy?url=${encodeURIComponent(r.imageUrl)}" alt="product"
+             style="max-width:80px;max-height:60px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:#f8fafc;"
+             onerror="this.src='';this.style.display='none';this.nextElementSibling.style.display='flex';"
+           /><span style="display:none;width:80px;height:50px;align-items:center;justify-content:center;font-size:0.7rem;color:var(--text3);border:1px dashed var(--border);border-radius:6px;">Preview N/A</span>
+         </a>`
+      : `<span style="color:var(--text3);font-size:0.78rem;">—</span>`;
+
+    const urlCell = r.imageUrl
+      ? `<a href="${escAttr(r.imageUrl)}" target="_blank" rel="noopener" style="font-size:0.72rem;color:var(--accent);word-break:break-all;">${escHtml(trunc(r.imageUrl, 55))}</a>`
+      : `<span style="color:var(--text3)">—</span>`;
+
+    const sourceCell = r.sourceName
+      ? `<a href="${escAttr(r.source)}" target="_blank" rel="noopener" style="font-size:0.72rem;color:var(--text2);">${escHtml(r.sourceName)}</a>`
+      : `<span style="color:var(--text3)">—</span>`;
+
+    return `
+      <tr id="img-row-${idx}">
+        <td style="color:var(--text3);font-size:0.72rem;">${idx + 1}</td>
+        <td><span class="item-no-tag">${escHtml(r.itemNo || '—')}</span></td>
+        <td style="font-size:0.78rem;">${escHtml(r.brand || '—')}</td>
+        <td>${confBadge(r)}</td>
+        <td>${imgPreview}</td>
+        <td>${urlCell}</td>
+        <td>${sourceCell}</td>
+        <td title="${escAttr(r.reason || '')}" style="font-size:0.72rem;color:var(--text2);max-width:260px;">${escHtml(trunc(r.reason || '—', 80))}</td>
+      </tr>`;
+  }
+
+  function renderImgTable() {
+    if (!imgTableBody) return;
+    const query = (imgSearchFilter ? imgSearchFilter.value.toLowerCase() : '');
+    const filtered = imgResults.filter(r => {
+      if (imgCurrentFilter === 'high'     && r.confidence !== 'HIGH')   return false;
+      if (imgCurrentFilter === 'medium'   && r.confidence !== 'MEDIUM') return false;
+      if (imgCurrentFilter === 'low'      && r.confidence !== 'LOW')    return false;
+      if (imgCurrentFilter === 'notfound' && r.imageUrl)               return false;
+      if (query) {
+        const hay = `${r.itemNo} ${r.brand} ${r.description}`.toLowerCase();
+        if (!hay.includes(query)) return false;
+      }
+      return true;
+    });
+    imgTableBody.innerHTML = filtered.map((r, fi) => {
+      const realIdx = imgResults.indexOf(r);
+      return renderImgRow(r, realIdx);
+    }).join('');
+    if (imgTableBadge) imgTableBadge.textContent = `${imgResults.length} records`;
+  }
+
+  function updateImgCounters() {
+    let hi = 0, med = 0, lo = 0, nf = 0;
+    imgResults.forEach(r => {
+      if (r.confidence === 'HIGH') hi++;
+      else if (r.confidence === 'MEDIUM') med++;
+      else if (r.confidence === 'LOW') lo++;
+      else nf++;
+    });
+    if (imgStatTotal)    imgStatTotal.textContent    = imgResults.length;
+    if (imgStatHigh)     imgStatHigh.textContent     = hi;
+    if (imgStatMed)      imgStatMed.textContent      = med;
+    if (imgStatLow)      imgStatLow.textContent      = lo;
+    if (imgStatNotFound) imgStatNotFound.textContent = nf;
+    if (imgCntAll)       imgCntAll.textContent       = imgResults.length;
+    if (imgCntHigh)      imgCntHigh.textContent      = hi;
+    if (imgCntMed)       imgCntMed.textContent       = med;
+    if (imgCntLow)       imgCntLow.textContent       = lo;
+    if (imgCntNotFound)  imgCntNotFound.textContent  = nf;
+  }
+
+  // ── Filter pills ──────────────────────────────────────────────────────────
+  if (imgFilterPills) {
+    imgFilterPills.querySelectorAll('.filter-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        imgFilterPills.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        imgCurrentFilter = pill.dataset.imgfilter || 'all';
+        renderImgTable();
+      });
+    });
+  }
+  if (imgSearchFilter) imgSearchFilter.addEventListener('input', renderImgTable);
+
+  // ── Single item test ──────────────────────────────────────────────────────
+  if (imgSingleSearchBtn) {
+    imgSingleSearchBtn.addEventListener('click', async () => {
+      const itemNo = document.getElementById('imgSingleItemNo')?.value.trim() || '';
+      const brand  = document.getElementById('imgSingleBrand')?.value.trim() || '';
+      const desc   = document.getElementById('imgSingleDesc')?.value.trim() || '';
+      const ref    = document.getElementById('imgSingleRef')?.value.trim() || '';
+      if (!itemNo && !brand && !desc && !ref) {
+        showToast('Please enter at least Item No or Brand', 'error'); return;
+      }
+      imgSingleSearchBtn.disabled = true;
+      imgSingleSearchBtn.innerHTML = '<span class="spinner"></span> Searching...';
+      if (imgSingleResult) { imgSingleResult.style.display = 'flex'; imgSingleResult.innerHTML = '<span style="color:var(--text3)"><i class="fas fa-spinner fa-spin"></i> Searching manufacturer & web...</span>'; }
+      try {
+        const resp = await fetch('/api/image/find-single', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemNo, brand, description: desc, refLink: ref }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Search failed');
+        const imgHtml = data.imageUrl
+          ? `<img src="/api/proxy?url=${encodeURIComponent(data.imageUrl)}" style="max-height:100px;max-width:150px;object-fit:contain;border-radius:8px;border:1px solid var(--border);" onerror="this.style.display='none'" />`
+          : '';
+        const urlLink = data.imageUrl ? `<a href="${escAttr(data.imageUrl)}" target="_blank" style="font-size:0.78rem;word-break:break-all;">${escHtml(trunc(data.imageUrl, 70))}</a>` : '';
+        if (imgSingleResult) imgSingleResult.innerHTML = `
+          ${confBadge(data)}
+          <span style="font-size:0.8rem;font-weight:600;">${escHtml(data.reason || '')}</span>
+          ${data.sourceName ? `<span style="font-size:0.75rem;color:var(--text3);">Source: ${escHtml(data.sourceName)}</span>` : ''}
+          ${urlLink}${imgHtml}`;
+      } catch (err) {
+        if (imgSingleResult) imgSingleResult.innerHTML = `<span style="color:#ef4444"><i class="fas fa-circle-exclamation"></i> ${escHtml(err.message)}</span>`;
+      } finally {
+        imgSingleSearchBtn.disabled = false;
+        imgSingleSearchBtn.innerHTML = '<i class="fas fa-search"></i> Find Image';
+      }
+    });
+  }
+
+  // ── Start Batch ───────────────────────────────────────────────────────────
+  if (imgStartBtn) {
+    imgStartBtn.addEventListener('click', () => {
+      if (imgIsScanning) return;
+      if (!imgRawRows.length) { showToast('Please upload a file first', 'error'); return; }
+
+      const colItemNo = imgMapItemNo?.value || '';
+      const colBrand  = imgMapBrand?.value  || '';
+      const colDesc   = imgMapDesc?.value   || '';
+      const colRef    = imgMapRef?.value    || '';
+
+      if (!colItemNo && !colBrand && !colRef) {
+        showToast('Please map at least Item No, Brand, or Ref Link', 'error'); return;
+      }
+
+      const items = imgRawRows.map((r, idx) => ({
+        id: idx,
+        itemNo:      (colItemNo ? r[colItemNo] : '') || '',
+        brand:       (colBrand  ? r[colBrand]  : '') || '',
+        description: (colDesc   ? r[colDesc]   : '') || '',
+        refLink:     (colRef    ? r[colRef]    : '') || '',
+      }));
+
+      imgResults = items.map(it => ({
+        ...it, imageUrl: '', confidence: 'NONE', confidenceLabel: 'In Queue',
+        source: '', sourceName: '', reason: 'Waiting to scan...', alternates: [],
+      }));
+
+      imgIsScanning = true;
+      imgStartBtn.disabled = true;
+      imgStartBtn.innerHTML = '<span class="spinner"></span> Scanning Images...';
+      if (imgStopBtn)         { imgStopBtn.style.display = 'inline-flex'; }
+      if (imgStatsRow)        imgStatsRow.style.display  = 'grid';
+      if (imgProgressSection) imgProgressSection.style.display = 'block';
+      if (imgResultsSection)  imgResultsSection.style.display  = 'block';
+      if (imgFilterPills)     imgFilterPills.style.display     = 'flex';
+      if (imgExportAllBtn)    imgExportAllBtn.style.display    = 'none';
+      if (imgExportFoundBtn)  imgExportFoundBtn.style.display  = 'none';
+      if (imgExportNotFoundBtn) imgExportNotFoundBtn.style.display = 'none';
+      if (imgStatTotal) imgStatTotal.textContent = items.length;
+      if (imgTotalLbl)  imgTotalLbl.textContent  = items.length;
+      if (imgCheckedLbl) imgCheckedLbl.textContent = '0';
+      if (imgProgressFill) imgProgressFill.style.width = '0%';
+      if (imgProgressPct)  imgProgressPct.textContent  = '0%';
+      if (imgEtaLbl)       imgEtaLbl.textContent        = 'calculating...';
+      renderImgTable();
+
+      if (imgSocket?.connected) imgSocket.disconnect();
+      imgSocket = io({ reconnection: false, transports: ['websocket', 'polling'] });
+
+      imgSocket.on('connect_error', err => {
+        imgIsScanning = false; imgStartBtn.disabled = false;
+        imgStartBtn.innerHTML = '<i class="fas fa-search"></i> Start Finding Images';
+        if (imgStopBtn) imgStopBtn.style.display = 'none';
+        showToast('Connection error: ' + (err.message || 'failed'), 'error');
+      });
+
+      imgSocket.on('connect', () => {
+        imgSocket.emit('startImgBatch', { items });
+      });
+
+      imgSocket.on('imgProgress', d => {
+        const pct = Math.round(d.percent || 0);
+        if (imgProgressFill) imgProgressFill.style.width = pct + '%';
+        if (imgProgressPct)  imgProgressPct.textContent  = pct + '%';
+        if (imgCheckedLbl)   imgCheckedLbl.textContent   = d.checked;
+        if (imgTotalLbl)     imgTotalLbl.textContent      = d.total;
+        if (imgStatHigh)     imgStatHigh.textContent      = d.highCount;
+        if (imgStatMed)      imgStatMed.textContent       = d.mediumCount;
+        if (imgStatLow)      imgStatLow.textContent       = d.lowCount;
+        if (imgStatNotFound) imgStatNotFound.textContent  = d.notFoundCount;
+        if (imgCurrentItem && d.currentItem) imgCurrentItem.textContent = trunc(d.currentItem, 40);
+        if (d.etaMs > 0 && imgEtaLbl) {
+          const sec = Math.ceil(d.etaMs / 1000);
+          imgEtaLbl.textContent = sec < 60 ? `~${sec}s` : `~${Math.floor(sec/60)}m ${sec%60}s`;
+        }
+      });
+
+      imgSocket.on('imgItemResult', data => {
+        if (data?.id !== undefined && imgResults[data.id]) {
+          imgResults[data.id] = { ...imgResults[data.id], ...data.result };
+          // Update single row in table
+          const rowEl = document.getElementById(`img-row-${data.id}`);
+          if (rowEl) {
+            const tmp = document.createElement('tbody');
+            tmp.innerHTML = renderImgRow(imgResults[data.id], data.id);
+            rowEl.replaceWith(tmp.firstElementChild);
+          }
+          updateImgCounters();
+        }
+      });
+
+      const onComplete = (final, cancelled) => {
+        imgIsScanning = false;
+        imgStartBtn.disabled = false;
+        imgStartBtn.innerHTML = '<i class="fas fa-search"></i> Re-Scan All';
+        if (imgStopBtn) imgStopBtn.style.display = 'none';
+        if (imgProgressFill) imgProgressFill.style.width = '100%';
+        if (imgProgressPct)  imgProgressPct.textContent  = '100%';
+        if (imgCurrentItem)  imgCurrentItem.textContent  = cancelled ? '⏹ Stopped by user' : '✅ Scan Complete';
+        if (imgEtaLbl)       imgEtaLbl.textContent       = cancelled ? '—' : 'Done';
+        updateImgCounters();
+        renderImgTable();
+        if (imgExportAllBtn)      imgExportAllBtn.style.display = 'inline-flex';
+        if (imgExportFoundBtn)    imgExportFoundBtn.style.display = 'inline-flex';
+        if (imgExportNotFoundBtn) imgExportNotFoundBtn.style.display = 'inline-flex';
+        if (!cancelled) {
+          const found = (final.highCount || 0) + (final.mediumCount || 0) + (final.lowCount || 0);
+          showToast(`Image scan complete! Found: ${found} | Not found: ${final.notFoundCount}`, 'success', 7000);
+        } else {
+          showToast('Image scan stopped', 'warn');
+        }
+      };
+      imgSocket.on('imgBatchComplete',  d => onComplete(d, false));
+      imgSocket.on('imgBatchCancelled', d => onComplete(d, true));
+      imgSocket.on('imgError', err => {
+        imgIsScanning = false; imgStartBtn.disabled = false;
+        imgStartBtn.innerHTML = '<i class="fas fa-search"></i> Start Finding Images';
+        if (imgStopBtn) imgStopBtn.style.display = 'none';
+        showToast('Image search error: ' + (err.message || err), 'error');
+      });
+    });
+  }
+
+  if (imgStopBtn) {
+    imgStopBtn.addEventListener('click', () => {
+      if (imgSocket?.connected) imgSocket.emit('stopImgBatch');
+      imgIsScanning = false;
+      imgStartBtn.disabled = false;
+      imgStartBtn.innerHTML = '<i class="fas fa-search"></i> Resume';
+      imgStopBtn.style.display = 'none';
+      if (imgCurrentItem) imgCurrentItem.textContent = '⏹ Stopped';
+      showToast('Stopping scan...', 'warn');
+    });
+  }
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  async function exportImgExcel(filterFn, sheetName) {
+    const rows = imgResults.filter(filterFn);
+    if (!rows.length) { showToast('No records to export!', 'info'); return; }
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'BlazeTools Image Finder';
+    const ws = wb.addWorksheet(sheetName);
+    ws.columns = [
+      { header: 'Item No', key: 'itemNo', width: 20 },
+      { header: 'Brand', key: 'brand', width: 18 },
+      { header: 'Description', key: 'description', width: 35 },
+      { header: 'Confidence', key: 'confidence', width: 14 },
+      { header: 'Image URL', key: 'imageUrl', width: 60 },
+      { header: 'Source', key: 'sourceName', width: 22 },
+      { header: 'Source Link', key: 'source', width: 50 },
+      { header: 'Notes / Reason', key: 'reason', width: 50 },
+    ];
+    ws.getRow(1).eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+    rows.forEach(r => {
+      const row = ws.addRow({
+        itemNo: r.itemNo, brand: r.brand, description: r.description,
+        confidence: r.confidenceLabel || r.confidence,
+        imageUrl: r.imageUrl || '',
+        sourceName: r.sourceName || '',
+        source: r.source || '',
+        reason: r.reason || '',
+      });
+      const confCell = row.getCell('confidence');
+      if (r.confidence === 'HIGH')   { confCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } }; confCell.font = { color: { argb: 'FF15803D' }, bold: true }; }
+      else if (r.confidence === 'MEDIUM') { confCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } }; confCell.font = { color: { argb: 'FF92400E' }, bold: true }; }
+      else if (r.confidence === 'LOW')    { confCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } }; confCell.font = { color: { argb: 'FF1E40AF' }, bold: true }; }
+      else                                { confCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } }; confCell.font = { color: { argb: 'FFDC2626' }, bold: true }; }
+      if (r.imageUrl) {
+        const urlCell = row.getCell('imageUrl');
+        urlCell.value = { text: 'View Image', hyperlink: r.imageUrl };
+        urlCell.font = { color: { argb: 'FF6366F1' }, underline: true };
+      }
+    });
+    const buf = await wb.xlsx.writeBuffer();
+    const dt = new Date().toISOString().slice(0, 10);
+    saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `ImageFinder_${sheetName}_${dt}.xlsx`);
+    showToast('Exported successfully!', 'success');
+  }
+
+  if (imgExportAllBtn)      imgExportAllBtn.addEventListener('click',      () => exportImgExcel(() => true, 'All_Results'));
+  if (imgExportFoundBtn)    imgExportFoundBtn.addEventListener('click',    () => exportImgExcel(r => !!r.imageUrl, 'Images_Found'));
+  if (imgExportNotFoundBtn) imgExportNotFoundBtn.addEventListener('click', () => exportImgExcel(r => !r.imageUrl, 'Not_Found'));
 
 })();
 

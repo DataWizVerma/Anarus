@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const axios = require('axios');
 const { findUpcForItem } = require('./upc-finder');
 const { validateUpcItem } = require('./upc-validator');
+const { findImageForItem } = require('./image-finder');
 
 const app = express();
 const server = http.createServer(app);
@@ -114,6 +115,115 @@ app.post('/api/upc/validate-single', async (req, res) => {
     res.status(500).json({ error: err.message || 'Error validating UPC' });
   }
 });
+
+// ─── Image Finder Single Item Endpoint (Beta) ─────────────────────────────────
+app.post('/api/image/find-single', async (req, res) => {
+  try {
+    const { itemNo, brand, description, refLink } = req.body;
+    if (!itemNo && !brand && !description && !refLink) {
+      return res.status(400).json({ error: 'Please provide at least Item No, Brand, Description, or Ref Link' });
+    }
+    const result = await findImageForItem({ itemNo, brand, description, refLink });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Error finding image' });
+  }
+});
+
+// ─── Image Finder Batch Processor ────────────────────────────────────────────
+const IMG_CONCURRENCY = 3;
+
+async function processImageBatch(socket, items, cancelled) {
+  const total = items.length;
+  let checked = 0;
+  let highCount = 0;
+  let mediumCount = 0;
+  let lowCount = 0;
+  let notFoundCount = 0;
+  const startTime = Date.now();
+
+  const queue = items.map((it, idx) => ({ ...it, __idx: idx }));
+  let activeWorkers = 0;
+  let resolveAll = null;
+  const allDone = new Promise(resolve => { resolveAll = resolve; });
+
+  function emitProgress(itemLabel) {
+    const percent = total > 0 ? (checked / total) * 100 : 0;
+    const elapsed = Date.now() - startTime;
+    const avgTime = elapsed / (checked || 1);
+    const remaining = (total - checked) * avgTime;
+    socket.emit('imgProgress', {
+      checked, total, highCount, mediumCount, lowCount, notFoundCount,
+      currentItem: itemLabel || 'Processing...',
+      percent, etaMs: remaining, avgTimeMs: avgTime,
+    });
+  }
+
+  async function worker() {
+    while (queue.length > 0 && !cancelled.value) {
+      const item = queue.shift();
+      const label = item.itemNo || item.description || item.brand || `Item #${item.__idx + 1}`;
+      emitProgress(label);
+
+      let result;
+      try {
+        result = await findImageForItem({
+          itemNo: item.itemNo,
+          brand: item.brand,
+          description: item.description,
+          refLink: item.refLink,
+        });
+      } catch (err) {
+        result = {
+          itemNo: item.itemNo || '',
+          brand: item.brand || '',
+          description: item.description || '',
+          refLink: item.refLink || '',
+          imageUrl: '',
+          confidence: 'NONE',
+          confidenceLabel: 'Error',
+          source: '',
+          sourceName: '',
+          reason: err.message || 'Error during image search',
+          alternates: [],
+        };
+      }
+
+      if (cancelled.value) break;
+
+      checked++;
+      if (result.confidence === 'HIGH') highCount++;
+      else if (result.confidence === 'MEDIUM') mediumCount++;
+      else if (result.confidence === 'LOW') lowCount++;
+      else notFoundCount++;
+
+      socket.emit('imgItemResult', {
+        id: item.id !== undefined ? item.id : item.__idx,
+        index: item.__idx,
+        result,
+      });
+
+      emitProgress(null);
+
+      // Polite delay to avoid overloading external servers
+      if (queue.length > 0 && !cancelled.value) {
+        await new Promise(r => setTimeout(r, 300 + Math.floor(Math.random() * 200)));
+      }
+    }
+    activeWorkers--;
+    if (activeWorkers === 0 && resolveAll) resolveAll();
+  }
+
+  activeWorkers = Math.min(IMG_CONCURRENCY, total);
+  for (let i = 0; i < activeWorkers; i++) worker();
+  await allDone;
+
+  if (cancelled.value) {
+    socket.emit('imgBatchCancelled', { checked, total, highCount, mediumCount, lowCount, notFoundCount });
+  } else {
+    socket.emit('imgBatchComplete', { total, highCount, mediumCount, lowCount, notFoundCount });
+  }
+}
 
 const CONCURRENCY = 15;
 const REQUEST_TIMEOUT = 18000;
@@ -630,10 +740,40 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Image Finder events
+  let isImgScanning = false;
+  const imgCancelled = { value: false };
+
+  socket.on('startImgBatch', async (data) => {
+    if (isImgScanning) return;
+    const items = data.items;
+    if (!items || !items.length) {
+      socket.emit('imgError', { message: 'No items provided for image search' });
+      return;
+    }
+    isImgScanning = true;
+    imgCancelled.value = false;
+    try {
+      await processImageBatch(socket, items, imgCancelled);
+    } catch (err) {
+      socket.emit('imgError', { message: err.message });
+    } finally {
+      isImgScanning = false;
+    }
+  });
+
+  socket.on('stopImgBatch', () => {
+    if (isImgScanning) {
+      imgCancelled.value = true;
+      console.log('Image scan stopped by client:', socket.id);
+    }
+  });
+
   socket.on('disconnect', () => {
     cancelled.value = true;
     upcCancelled.value = true;
     upcValCancelled.value = true;
+    imgCancelled.value = true;
     console.log('Client disconnected:', socket.id);
   });
 });
