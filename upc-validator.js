@@ -244,6 +244,23 @@ async function validateUpcItem({ upc, itemNo, brand, description }) {
     }
 
     const { dbTitle, dbBrand, dbModel, variations, cleanPageText } = extractPageData(res.data);
+
+    // Safeguard: Check if title or extracted text itself indicates rate-limiting ("Too Fast")
+    const lowerTitle = (dbTitle || '').toLowerCase().trim();
+    if (lowerTitle === 'too fast' || lowerTitle.includes('too many requests') || lowerTitle === 'error') {
+      return {
+        upc: rawUpc,
+        cleanUpc,
+        itemNo,
+        status: 'RATE_LIMITED',
+        isValid: false,
+        message: 'Database rate limit hit ("Too Fast") — please retry this item',
+        dbTitle: '',
+        dbBrand: '',
+        dbModel: '',
+        url
+      };
+    }
     const normDbModel = normalizeStr(dbModel);
     const normDbTitle = normalizeStr(dbTitle);
     const normPageText = normalizeStr(cleanPageText);
