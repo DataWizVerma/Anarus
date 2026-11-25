@@ -2604,6 +2604,10 @@ processSheetsBtn.addEventListener('click', async () => {
     function getIssues(hdr, strVal, isMissing, allMfgValues, primaryProdTypeVal) {
       const issues = [];
       const lhdr = hdr.toLowerCase();
+
+      // ── ALWAYS SKIP these internal/metadata columns — never flag them ──
+      if (lhdr === 'companyname' || lhdr === 'filename') return issues;
+
       const isFeatures = /^features$/i.test(hdr);
       const isLongDesc = /long\s*desc/i.test(hdr);
       const isNumericCol = NUMERIC_ONLY_COLS.has(lhdr);
