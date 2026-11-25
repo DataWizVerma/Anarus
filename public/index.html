@@ -2389,7 +2389,17 @@ processSheetsBtn.addEventListener('click', async () => {
 
     // ── Columns that must contain ONLY numbers (no "in." / "lbs." text) ───────
     // Minor / function words that should be lowercase in proper case (unless first word)
-    const MINOR_WORDS = new Set(['with','for','and','is','as','if','in','the','than']);
+    // Prepositions
+    const MINOR_WORDS = new Set([
+      'of','per','for','with','in','on','by','to','from','at','into','over','under',
+      'through','between','without','within','about','across',
+      // Articles
+      'a','an','the',
+      // Conjunctions
+      'and','or','but','nor','yet','so',
+      // Extra common ones already in original
+      'is','as','if','than'
+    ]);
 
     const NUMERIC_ONLY_COLS = new Set([
       'unit length (in.)','unit depth (in.)','unit width (in.)','unit height (in.)','unit weight (lbs.)',
@@ -2655,21 +2665,32 @@ processSheetsBtn.addEventListener('click', async () => {
         issues.push('Description starts with a numeric value');
       }
 
-      // 11. Description minor words: With, For, And, Is, As, If, In, The, Than must be lowercase (with, for, and...)
+      // 11. Description minor words (prepositions, articles, conjunctions) must be lowercase (unless first word)
       if (isDescCol && strVal.trim()) {
+        const PREPOSITIONS = new Set(['of','per','for','with','in','on','by','to','from','at','into','over','under','through','between','without','within','about','across']);
+        const ARTICLES     = new Set(['a','an','the']);
+        const CONJUNCTIONS = new Set(['and','or','but','nor','yet','so','is','as','if','than']);
         const tokens = strVal.trim().split(/\s+/);
         const minorProblems = [];
-        for (const token of tokens) {
+        for (let ti = 0; ti < tokens.length; ti++) {
+          const token = tokens[ti];
           const core = token.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
           if (!core) continue;
           const alpha = core.replace(/[^a-zA-Z]/g, '');
           if (!alpha) continue;
-          if (MINOR_WORDS.has(alpha.toLowerCase()) && alpha !== alpha.toLowerCase()) {
-            minorProblems.push(`Minor word "${core}" should be lowercase ("${alpha.toLowerCase()}")`);
+          const low = alpha.toLowerCase();
+          if (MINOR_WORDS.has(low) && alpha !== low) {
+            // Skip if it is the VERY FIRST word in the description (first position title case is OK)
+            if (ti === 0) continue;
+            let category = '';
+            if (PREPOSITIONS.has(low)) category = 'preposition';
+            else if (ARTICLES.has(low))     category = 'article';
+            else if (CONJUNCTIONS.has(low)) category = 'conjunction';
+            minorProblems.push(`${category ? category.charAt(0).toUpperCase()+category.slice(1)+' ' : ''}"${core}" should be lowercase ("${low}")`);
           }
         }
         if (minorProblems.length) {
-          issues.push(minorProblems.join('; '));
+          issues.push('Minor word casing: ' + minorProblems.join('; '));
         }
       }
 
